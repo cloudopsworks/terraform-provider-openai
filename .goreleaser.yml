@@ -1,0 +1,78 @@
+# Visit https://goreleaser.com for documentation on how to customize this
+# behavior.
+version: 2
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - env:
+    # goreleaser does not work with CGO, it could also complicate
+    # usage by users in CI/CD systems like HCP Terraform where
+    # they are unable to install libraries.
+    - CGO_ENABLED=0
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+    - "-trimpath"
+    ldflags:
+    - '-s -w -X main.version={{.Version}} -X main.commit={{.Commit}}'
+    goos:
+    - freebsd
+    - windows
+    - linux
+    - darwin
+    goarch:
+    - amd64
+    - '386'
+    - arm
+    - arm64
+    ignore:
+      - goos: darwin
+        goarch: '386'
+      - goos: windows
+        goarch: arm
+    binary: '{{ .ProjectName }}_v{{ .Version }}'
+archives:
+  - formats:
+      - zip
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+checksum:
+#  extra_files:
+#  - glob: 'fileglobsample.json'
+#    name_template: '{{ .ProjectName }}_{{ .Version }}_fileglobsample.json'
+  name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
+  algorithm: sha256
+signs:
+  - artifacts: checksum
+    args:
+      # if you are using this in a GitHub action or some other automated pipeline, you
+      # need to pass the batch flag to indicate its not interactive.
+      - "--batch"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}" # set this environment variable for your signing key
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+
+release:
+    use_existing_draft: true # This is important for CloudOpsWorks workflow to allow you to update the release with new artifacts without creating a new release.
+#    extra_files:
+#      - glob: 'fileglob'
+changelog:
+  disable: true
+# MacOS Sign & Notarize
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      # Keep aligned with RELEASING.md: the repository/release artifact name is intentionally fixed.
+      ids:
+        - myrelease
+      sign:
+        certificate: '{{ .Env.MACOS_SIGN_P12 }}'
+        password: '{{ .Env.MACOS_SIGN_PASSWORD }}'
+      notarize:
+        issuer_id: '{{ .Env.MACOS_NOTARY_ISSUER_ID }}'
+        key_id: '{{ .Env.MACOS_NOTARY_KEY_ID }}'
+        key: '{{ .Env.MACOS_NOTARY_KEY }}'
+        wait: true
+        timeout: 20m
