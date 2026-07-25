@@ -1,4 +1,4 @@
-environment: "dev|uat|prod|demo"
+environment: "prod"
 # This file contains the environment variables for the Kubernetes deployment
 #runner_set: "RUNNER-ENV" # Optional: when using self-hosted runners
 #

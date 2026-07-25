@@ -1,30 +1,27 @@
-# This file contains the global variables that will be used across all pipelines,
-# these variables can be overwritten by the pipeline specific variables defined in .cloudopsworks/vars/inputs-<pipeline>.yaml
-organization_name: "ORG_NAME"
-organization_unit: "ORG_UNIT"
-environment_name: "ENV_NAME"
-repository_owner: "REPO_OWNER" # Required
+organization_name: "CloudOpsWorks"
+organization_unit: "Providers"
+environment_name: "terraform-provider-openai"
+repository_owner: "cloudopsworks"
 #
 ## Default Go version is 1.25, uncomment to build with different version,
 ## Dist is the OS distribution, arch is the architecture
 ## Image variant should be used for the specific version of OS image to run
 golang:
   main_file: .
-#  package_name: sample-cli # Optional, defaults to the go.mod module name or repository name
-#  version: 1.23
+  version: 1.26
 #  dist: linux
 #  arch: amd64
 #  image_variant: alpine:3.21
 #  disable_cgo: true # uncomment to disable CGO (pure golang build), useful on some cases
-#  goreleaser: true # uncomment to enable goreleaser, the tool is disabled by default, it is recommended to put cloud_type to `none` in case of using GoReleaser, no deployment will be made
+  goreleaser: true # uncomment to enable goreleaser, the tool is disabled by default
 #
 # Set Snyk processing to true if want to enable, the tool is disabled by default
 #snyk:
 #  enabled: true
 #
 # Set Semgrep processing to true if want to enable, the tool is disabled by default
-#semgrep:
-#  enabled: true
+semgrep:
+  enabled: true
 #
 # Set Trivy processing to true if want to enable Docker Image scan, the tool is disabled by default
 #trivy:
@@ -61,7 +58,7 @@ golang:
 #
 # Set if this is a library project
 #isLibrary: true # DEPRECATED!
-#is_library: true
+is_library: true
 #
 # Set if this is an OpenSource project, defaults to true
 #is_ooss: true
@@ -149,8 +146,8 @@ golang:
 #
 ## CD pipeline configuration uncomment and configure accordingly to enable
 # Target Cloud
-cloud: aws | azure | gcp | none
+cloud: none
 # Cloud deployment type depends on the target cloud
-cloud_type: beanstalk | eks | lambda | aks | webapp | function | gke | appengine | cloudrun | kubernetes | none
+cloud_type: none
 # Indicate the Runner that will be used for the deployment - usually will be a hosted runner
 # runner_set: "arc-runner-set"
