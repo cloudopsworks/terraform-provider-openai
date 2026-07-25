@@ -1,0 +1,137 @@
+name: Terraform Provider OpenAI
+
+badges:
+  - name: Latest Release
+    image: https://img.shields.io/github/release/cloudopsworks/terraform-provider-openai.svg?style=for-the-badge
+    url: https://github.com/cloudopsworks/terraform-provider-openai/releases/latest
+  - name: Terraform Registry
+    image: https://img.shields.io/badge/registry-cloudopsworks%2Fopenai-844FBA?style=for-the-badge&logo=terraform
+    url: https://registry.terraform.io/providers/cloudopsworks/openai/latest
+  - name: OpenTofu
+    image: https://img.shields.io/badge/OpenTofu-compatible-FFDA18?style=for-the-badge&logo=opentofu&logoColor=black
+    url: https://opentofu.org
+  - name: Go Report Card
+    image: https://goreportcard.com/badge/github.com/cloudopsworks/terraform-provider-openai?style=for-the-badge
+    url: https://goreportcard.com/report/github.com/cloudopsworks/terraform-provider-openai
+  - name: Last Updated
+    image: https://img.shields.io/github/last-commit/cloudopsworks/terraform-provider-openai.svg?style=for-the-badge
+    url: https://github.com/cloudopsworks/terraform-provider-openai/commits
+
+license: "APACHE2"
+
+copyrights:
+  - name: "Cloud Ops Works LLC"
+    url: "https://cloudopsworks.co"
+    year: "2021"
+
+github_repo: cloudopsworks/terraform-provider-openai
+
+description: |-
+  Terraform/OpenTofu provider for OpenAI Administration APIs. V1 manages projects,
+  project service accounts, and service-account project API keys using an existing
+  OpenAI admin API key supplied directly or resolved from AWS Secrets Manager,
+  Google Secret Manager, or Azure Key Vault.
+
+introduction: |-
+  This provider turns a small but important OpenAI organization bootstrap path into
+  reviewed infrastructure-as-code: create a project, create a service account, and
+  issue the service account's project API key.
+
+  V1 intentionally does not manage organization-level admin API key lifecycle.
+  It consumes an existing admin key and can resolve it from a cloud secret manager
+  without storing that resolved key in Terraform state.
+
+usage: |-
+  ## Provider configuration
+
+  Exactly one admin-key source must be configured.
+
+  ```hcl
+  provider "openai" {
+    admin_api_key = var.openai_admin_api_key
+  }
+  ```
+
+  AWS Secrets Manager:
+
+  ```hcl
+  provider "openai" {
+    aws_secrets_manager = {
+      region    = "us-east-1"
+      secret_id = "prod/openai/admin"
+      json_key  = "admin_api_key"
+    }
+  }
+  ```
+
+  GCP Secret Manager:
+
+  ```hcl
+  provider "openai" {
+    gcp_secret_manager = {
+      project_id = "platform-prod"
+      secret_id  = "openai-admin-key"
+      version    = "latest"
+      json_key   = "admin_api_key"
+    }
+  }
+  ```
+
+  Azure Key Vault:
+
+  ```hcl
+  provider "openai" {
+    azure_key_vault = {
+      vault_url   = "https://platform-prod.vault.azure.net/"
+      secret_name = "openai-admin-key"
+      json_key    = "admin_api_key"
+    }
+  }
+  ```
+
+  ## Bootstrap one internal application
+
+  ```hcl
+  resource "openai_project" "app" {
+    name = "search-prod"
+  }
+
+  resource "openai_service_account" "app" {
+    project_id = openai_project.app.id
+    name       = "search-prod"
+    role       = "member"
+  }
+
+  resource "openai_project_api_key" "app" {
+    project_id         = openai_project.app.id
+    service_account_id = openai_service_account.app.id
+    name               = "search-prod"
+  }
+  ```
+
+  `openai_project_api_key.value` is Sensitive and returned only at create time.
+  Protect Terraform state accordingly.
+
+examples: |-
+  See:
+
+  - `examples/provider/`
+  - `examples/resources/openai_project/`
+  - `examples/resources/openai_service_account/`
+  - `examples/resources/openai_project_api_key/`
+
+quickstart: |-
+  ## Development
+
+  ```sh
+  go test ./...
+  go test -coverpkg=./... -coverprofile=coverage.out ./...
+  go tool cover -func=coverage.out
+  go build ./...
+  ```
+
+contributors:
+  - name: "Cristian Beraha"
+    github: "berahac"
+  - name: "Cloud Ops Works Dev Bot"
+    github: "cloudopsworks-dev"

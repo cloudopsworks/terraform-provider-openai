@@ -1,35 +1,13 @@
-# go-app-template
+# Terraform Provider OpenAI
 
-Go Lang Application Template with Github Action Gitops
+Terraform/OpenTofu provider for OpenAI Administration APIs.
 
-## Makefile Targets Usage
+V1 manages the bootstrap path for one internal application:
 
-### code/init Target
+- `openai_project`
+- `openai_service_account`
+- `openai_project_api_key`
 
-The `code/init` target initializes your Go application with the following actions:
+The provider consumes an existing OpenAI admin API key. Configure exactly one key source: direct `admin_api_key`, AWS Secrets Manager, GCP Secret Manager, or Azure Key Vault.
 
-- Installs required packages (gitversion, gh, yq)
-- Removes the existing go.mod file
-- Initializes a new Go module with the current project name
-- Runs `go mod tidy` to ensure dependencies are properly managed
-- Replaces all instances of "hello-service" with your project name in all Go files
-
-Usage:
-
-```bash
-make code/init
-```
-
-### version Target
-
-The `version` target creates a VERSION file for your application using GitVersion:
-
-- If the current commit is a Git tag, it extracts the version from the tag
-- Otherwise, it uses GitVersion to generate a semantic version
-- Replaces '+' with '-' in the version string for compatibility with Docker and Helm
-
-Usage:
-
-```bash
-make version
-```
+See `examples/` for usage. The API key resource exposes the created key material as a Sensitive computed value only at create time; protect Terraform state accordingly.
