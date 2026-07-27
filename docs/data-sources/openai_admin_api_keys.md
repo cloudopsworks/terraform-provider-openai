@@ -1,5 +1,7 @@
 # openai_admin_api_keys
 
+API group: [Admin API Keys](../api-groups/admin-api-keys.md).
+
 Lists OpenAI organization admin API keys. Values are redacted.
 
 ## Example Usage

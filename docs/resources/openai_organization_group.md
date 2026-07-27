@@ -1,5 +1,7 @@
 # openai_organization_group
 
+API group: [Organization Groups](../api-groups/organization-groups.md).
+
 Manages an OpenAI organization group. Destroy deletes the group through the OpenAI Admin API.
 
 ## Example Usage

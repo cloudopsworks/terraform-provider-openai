@@ -1,5 +1,7 @@
 # openai_service_accounts
 
+API group: [Projects](../api-groups/projects.md).
+
 Lists OpenAI project service accounts through the Administration API.
 
 ## Example Usage

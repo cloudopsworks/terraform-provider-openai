@@ -1,5 +1,7 @@
 # openai_project
 
+API group: [Projects](../api-groups/projects.md).
+
 Manages an OpenAI organization project through the Administration API. Destroy
 archives the project because OpenAI projects are archived rather than hard-deleted.
 

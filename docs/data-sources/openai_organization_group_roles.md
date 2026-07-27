@@ -1,5 +1,7 @@
 # openai_organization_group_roles
 
+API group: [Roles and Assignments](../api-groups/roles-and-assignments.md).
+
 Lists organization role assignments for an OpenAI organization group.
 
 ## Example Usage

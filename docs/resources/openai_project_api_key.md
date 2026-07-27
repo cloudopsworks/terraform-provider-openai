@@ -1,5 +1,7 @@
 # openai_project_api_key
 
+API group: [Projects](../api-groups/projects.md).
+
 Manages an OpenAI project API key owned by a project service account. The
 unredacted `value` is returned only during create and is stored as Sensitive
 Terraform state. Refresh and read operations return only metadata and the

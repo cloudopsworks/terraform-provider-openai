@@ -249,66 +249,104 @@ usage: |-
   Configure only one cloud secret source when no direct admin key is present. The
   provider fails fast if multiple secret sources are configured or discovered.
 
-  ## Supported resources
+  ## API group documentation
 
-  | Resource | Purpose | Import ID | Destroy behavior |
+  The provider documentation is organized by OpenAI Administration API group. Use
+  the catalog below to choose the right Terraform surface, then open the detailed
+  resource/data-source page or the group guide under `docs/api-groups/`.
+
+  ### Projects API group
+
+  Use this group to manage project containers, service accounts, project-scoped
+  service-account API keys, and project custom roles.
+
+  | Terraform surface | Kind | Purpose | Import ID / Lookup |
   | --- | --- | --- | --- |
-  | `openai_project` | Manage organization projects. | `proj_123` | Archives the project. |
-  | `openai_service_account` | Manage project service accounts. | `proj_123/svc_acct_123` | Deletes the service account. |
-  | `openai_project_api_key` | Issue service-account project API keys. | `proj_123/svc_acct_123/key_123` | Deletes the key. |
-  | `openai_admin_api_key` | Issue organization admin API keys. | `admin_key_123` | Deletes the key. |
-  | `openai_organization_group` | Manage organization groups. | `group_123` | Deletes the group. |
-  | `openai_organization_group_user` | Manage group membership. | `group_123/user_123` | Removes the user from the group. |
-  | `openai_organization_role` | Manage organization custom roles. | `role_123` | Deletes the custom role. |
-  | `openai_organization_user_role` | Assign organization roles to users. | `user_123/role_123` | Removes the assignment. |
-  | `openai_organization_group_role` | Assign organization roles to groups. | `group_123/role_123` | Removes the assignment. |
-  | `openai_project_role` | Manage project custom roles. | `proj_123/role_123` | Deletes the custom role. |
+  | `openai_project` | Resource | Create and update organization projects. Destroy archives the project. | `proj_123` |
+  | `openai_projects` / `openai_project` | Data sources | List projects or read a project by ID. | `id` |
+  | `openai_service_account` | Resource | Create project service accounts without implicit default keys. | `proj_123/svc_acct_123` |
+  | `openai_service_accounts` / `openai_service_account` | Data sources | List or read service accounts for a project. | `project_id`, `id` |
+  | `openai_project_api_key` | Resource | Issue service-account project API keys with optional create-only scopes. | `proj_123/svc_acct_123/key_123` |
+  | `openai_project_role` | Resource | Manage project-scoped custom roles. | `proj_123/role_123` |
+  | `openai_project_roles` / `openai_project_role` | Data sources | List or read project-scoped roles. | `project_id`, `id` |
 
-  `openai_project_api_key.value` and `openai_admin_api_key.value` are Sensitive and
-  are returned only during create. They are still stored in Terraform state; use a
-  remote encrypted backend with restricted access. Use `lifecycle { prevent_destroy
-  = true }` for critical admin keys and roles that could lock out automation.
-  For admin API key expiration, configure at most one of `expires_in_seconds`,
-  `expire_in_hours`, or `expire_in_days`; hours and days are converted to OpenAI's
-  seconds-based create parameter. Admin API key `scopes` are optional create-only
-  strings sent as the create request `scopes` array; changing scopes replaces the
-  key and imported keys should leave scopes unset unless replacement is intended.
+  Guide: `docs/api-groups/projects.md`.
 
-  Admin API key scoped example:
+  ### Admin API Keys API group
 
-  ```hcl
-  resource "openai_admin_api_key" "readonly_admin" {
-    name           = "readonly-admin-automation"
-    expire_in_days = 30
-    scopes = [
-      "organization.users.read",
-      "organization.projects.read",
-    ]
-  }
-  ```
+  Use this group to rotate or manage organization admin API keys used for
+  administration automation.
 
-  ## Supported data sources
+  | Terraform surface | Kind | Purpose | Import ID / Lookup |
+  | --- | --- | --- | --- |
+  | `openai_admin_api_key` | Resource | Issue organization admin API keys with optional expiration and scopes. Destroy revokes the key. | `admin_key_123` |
+  | `openai_admin_api_keys` / `openai_admin_api_key` | Data sources | List or read admin key metadata. Values are redacted. | `id` |
 
-  | Data source | Purpose |
-  | --- | --- |
-  | `openai_project` / `openai_projects` | Read one or list organization projects. |
-  | `openai_service_account` / `openai_service_accounts` | Read one or list project service accounts. |
-  | `openai_admin_api_key` / `openai_admin_api_keys` | Read one or list organization admin API key metadata. Key values are redacted. |
-  | `openai_organization_user` / `openai_organization_users` | Read one or list organization users. Users are data-source only in this provider. |
-  | `openai_organization_group` / `openai_organization_groups` | Read one or list organization groups. |
-  | `openai_organization_group_user` / `openai_organization_group_users` | Read one group member or list group members. |
-  | `openai_organization_role` / `openai_organization_roles` | Read one or list organization roles. |
-  | `openai_organization_user_role` / `openai_organization_user_roles` | Read one or list user role assignments. |
-  | `openai_organization_group_role` / `openai_organization_group_roles` | Read one or list group role assignments. |
-  | `openai_project_role` / `openai_project_roles` | Read one or list project roles. |
+  `openai_admin_api_key.value` is Sensitive and returned only during create. It is
+  still stored in Terraform state; use a remote encrypted backend with restricted
+  access. Configure at most one of `expires_in_seconds`, `expire_in_hours`, or
+  `expire_in_days`; hours and days are converted to OpenAI's seconds-based create
+  parameter. Optional `scopes` are create-only strings sent as the create request
+  `scopes` array; changing scopes replaces the key. Imported keys should leave
+  `scopes` unset unless replacement is intended.
 
-  ## Common workflows
+  Destroy and replacement require OpenAI to confirm `deleted=true` for the
+  requested admin key ID. If OpenAI does not confirm deletion, Terraform keeps the
+  resource in state and reports a revoke failure.
 
-  ### Bootstrap a project and issue a service-account API key
+  Guide: `docs/api-groups/admin-api-keys.md`.
+
+  ### Organization Users API group
+
+  Use this group to discover existing organization users before assigning groups
+  or roles. Users are data-source only in this provider version; invite and user
+  lifecycle management stays outside Terraform here.
+
+  | Terraform surface | Kind | Purpose | Lookup |
+  | --- | --- | --- | --- |
+  | `openai_organization_user` | Data source | Read a user by ID, including profile and project summary metadata. | `id` |
+  | `openai_organization_users` | Data source | List users, optionally filtered by email addresses. | `emails`, `limit`, `after` |
+
+  Guide: `docs/api-groups/organization-users.md`.
+
+  ### Organization Groups API group
+
+  Use this group to manage organization groups and explicit group membership.
+
+  | Terraform surface | Kind | Purpose | Import ID / Lookup |
+  | --- | --- | --- | --- |
+  | `openai_organization_group` | Resource | Create and update organization groups. | `group_123` |
+  | `openai_organization_groups` / `openai_organization_group` | Data sources | List or read organization groups. | `id` |
+  | `openai_organization_group_user` | Resource | Add a user to a group. Destroy removes membership only. | `group_123/user_123` |
+  | `openai_organization_group_users` / `openai_organization_group_user` | Data sources | List or read group members. | `group_id`, `user_id` |
+
+  Guide: `docs/api-groups/organization-groups.md`.
+
+  ### Roles and Assignments API group
+
+  Use this group to define organization/project custom roles and assign
+  organization roles to users or groups.
+
+  | Terraform surface | Kind | Purpose | Import ID / Lookup |
+  | --- | --- | --- | --- |
+  | `openai_organization_role` | Resource | Manage organization-scoped custom roles. | `role_123` |
+  | `openai_organization_roles` / `openai_organization_role` | Data sources | List or read organization roles. | `id` |
+  | `openai_project_role` | Resource | Manage project-scoped custom roles. | `proj_123/role_123` |
+  | `openai_project_roles` / `openai_project_role` | Data sources | List or read project roles. | `project_id`, `id` |
+  | `openai_organization_user_role` | Resource | Assign an organization role to a user. Destroy removes the assignment. | `user_123/role_123` |
+  | `openai_organization_user_roles` / `openai_organization_user_role` | Data sources | List or read user role assignments. | `user_id`, `role_id` |
+  | `openai_organization_group_role` | Resource | Assign an organization role to a group. Destroy removes the assignment. | `group_123/role_123` |
+  | `openai_organization_group_roles` / `openai_organization_group_role` | Data sources | List or read group role assignments. | `group_id`, `role_id` |
+
+  Guide: `docs/api-groups/roles-and-assignments.md`.
+
+  ## Common workflows by API group
+
+  ### Projects: bootstrap a project and issue a service-account API key
 
   ```hcl
   resource "openai_project" "app" {
-    name          = "search-prod"
+    name            = "search-prod"
     external_key_id = "cost-center-1234"
   }
 
@@ -322,6 +360,7 @@ usage: |-
     project_id         = openai_project.app.id
     service_account_id = openai_service_account.app.id
     name               = "search-prod"
+    scopes             = ["responses.read"]
   }
 
   output "project_api_key" {
@@ -330,7 +369,31 @@ usage: |-
   }
   ```
 
-  ### Manage organization groups and role assignments
+  ### Admin API Keys: create scoped automation credentials
+
+  ```hcl
+  resource "openai_admin_api_key" "readonly_admin" {
+    name           = "readonly-admin-automation"
+    expire_in_days = 30
+    scopes = [
+      "organization.users.read",
+      "organization.projects.read",
+    ]
+
+    lifecycle {
+      prevent_destroy = true
+    }
+  }
+  ```
+
+  Rotate automation credentials by creating a new `openai_admin_api_key` with a
+  distinct name, storing the new `value` in your external secret manager or CI
+  secret store, updating provider initialization to read the new key, running
+  `terraform plan`, and then deliberately removing or destroying the old key. For
+  critical keys, add `prevent_destroy` and remove that lifecycle protection only
+  as part of an approved rotation change.
+
+  ### Organization Users and Groups: resolve users and manage membership
 
   ```hcl
   data "openai_organization_user" "alice" {
@@ -345,7 +408,11 @@ usage: |-
     group_id = openai_organization_group.engineering.id
     user_id  = data.openai_organization_user.alice.id
   }
+  ```
 
+  ### Roles and Assignments: create roles and bind them to principals
+
+  ```hcl
   resource "openai_organization_role" "auditor" {
     name        = "auditor"
     description = "Read-only organization auditor"
@@ -358,11 +425,7 @@ usage: |-
     group_id = openai_organization_group.engineering.id
     role_id  = openai_organization_role.auditor.id
   }
-  ```
 
-  ### Create a project-scoped custom role
-
-  ```hcl
   resource "openai_project_role" "api_key_reader" {
     project_id  = openai_project.app.id
     name        = "api-key-reader"
@@ -372,17 +435,6 @@ usage: |-
     ]
   }
   ```
-
-  ### Rotate automation credentials
-
-  1. Create a new `openai_admin_api_key` with a distinct name.
-  2. Store the new `value` in your external secret manager or CI secret store.
-  3. Update provider initialization to read the new bootstrap key.
-  4. Run `terraform plan` with the new key.
-  5. Remove the old key resource or import it and destroy it deliberately.
-
-  For critical keys, add `prevent_destroy` and remove that lifecycle protection only
-  as part of an approved rotation change.
 
   ## Operational guidance
 
@@ -427,6 +479,7 @@ usage: |-
 examples: |-
   See:
 
+  - `docs/api-groups/` for modular usage guides by OpenAI Administration API group.
   - `examples/provider/provider.tf` for direct variable initialization.
   - `examples/provider/environment/provider.tf` for environment-only initialization.
   - `examples/provider/aws_secrets_manager/provider.tf` for AWS Secrets Manager with optional AssumeRole.

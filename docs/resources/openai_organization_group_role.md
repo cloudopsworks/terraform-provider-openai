@@ -1,5 +1,7 @@
 # openai_organization_group_role
 
+API group: [Roles and Assignments](../api-groups/roles-and-assignments.md).
+
 Assigns an OpenAI organization role to a group. Destroy unassigns the role.
 
 ## Example Usage

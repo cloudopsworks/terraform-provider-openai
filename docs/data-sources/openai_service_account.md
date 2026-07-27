@@ -1,5 +1,7 @@
 # openai_service_account
 
+API group: [Projects](../api-groups/projects.md).
+
 Looks up one OpenAI project service account through the Administration API.
 
 Use `id` for direct lookup. When `id` is omitted, the provider performs an exact

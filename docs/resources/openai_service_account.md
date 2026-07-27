@@ -1,5 +1,7 @@
 # openai_service_account
 
+API group: [Projects](../api-groups/projects.md).
+
 Manages an OpenAI project service account through the Administration API.
 Creation uses `create_service_account_only=true` so that OpenAI does not issue an
 implicit unmanaged API key. Use `openai_project_api_key` to create explicit,

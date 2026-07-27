@@ -1,5 +1,7 @@
 # openai_organization_role
 
+API group: [Roles and Assignments](../api-groups/roles-and-assignments.md).
+
 Manages an OpenAI organization custom role. Destroy deletes the custom role. Use `prevent_destroy` for critical access roles.
 
 ## Example Usage

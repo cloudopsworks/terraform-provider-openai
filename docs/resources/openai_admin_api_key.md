@@ -1,5 +1,7 @@
 # openai_admin_api_key
 
+API group: [Admin API Keys](../api-groups/admin-api-keys.md).
+
 Manages an OpenAI organization admin API key. The unredacted `value` is returned only during create and is stored as Sensitive Terraform state. Destroy deletes the key through the OpenAI Admin API.
 
 Use `lifecycle { prevent_destroy = true }` for break-glass or critical automation keys.

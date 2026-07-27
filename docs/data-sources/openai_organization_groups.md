@@ -1,5 +1,7 @@
 # openai_organization_groups
 
+API group: [Organization Groups](../api-groups/organization-groups.md).
+
 Lists OpenAI organization groups.
 
 ## Example Usage

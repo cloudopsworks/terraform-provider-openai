@@ -1,5 +1,7 @@
 # openai_projects
 
+API group: [Projects](../api-groups/projects.md).
+
 Lists OpenAI organization projects through the Administration API.
 
 ## Example Usage

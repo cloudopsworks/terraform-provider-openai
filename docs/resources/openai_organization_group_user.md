@@ -1,5 +1,7 @@
 # openai_organization_group_user
 
+API group: [Organization Groups](../api-groups/organization-groups.md).
+
 Manages membership of an OpenAI organization user in a group. Destroy removes the user from the group.
 
 ## Example Usage

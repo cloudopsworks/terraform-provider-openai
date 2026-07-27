@@ -1,5 +1,7 @@
 # openai_project
 
+API group: [Projects](../api-groups/projects.md).
+
 Looks up one OpenAI organization project through the Administration API.
 
 Use `id` for a direct project retrieve lookup.
