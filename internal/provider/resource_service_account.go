@@ -9,15 +9,17 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/cloudopsworks/terraform-provider-openai/internal/client"
 )
 
 var (
-	_ resource.Resource                = &serviceAccountResource{}
-	_ resource.ResourceWithConfigure   = &serviceAccountResource{}
-	_ resource.ResourceWithImportState = &serviceAccountResource{}
+	_ resource.Resource                 = &serviceAccountResource{}
+	_ resource.ResourceWithConfigure    = &serviceAccountResource{}
+	_ resource.ResourceWithImportState  = &serviceAccountResource{}
+	_ resource.ResourceWithUpgradeState = &serviceAccountResource{}
 )
 
 type serviceAccountResource struct {
@@ -40,13 +42,31 @@ func (r *serviceAccountResource) Metadata(_ context.Context, req resource.Metada
 
 func (r *serviceAccountResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = resourceschema.Schema{
+		Version:             1,
 		MarkdownDescription: "OpenAI project service account. Creation uses create_service_account_only=true to avoid an unmanaged default key; use openai_project_api_key for explicit key issuance.",
 		Attributes: map[string]resourceschema.Attribute{
 			"id":         resourceschema.StringAttribute{Computed: true, MarkdownDescription: "OpenAI service account ID."},
 			"project_id": resourceschema.StringAttribute{Required: true, MarkdownDescription: "OpenAI project ID that owns the service account.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"name":       resourceschema.StringAttribute{Required: true, MarkdownDescription: "Service account name."},
-			"role":       resourceschema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("member"), MarkdownDescription: "Project role for the service account. Supported values are member and owner."},
+			"role":       resourceschema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("member"), MarkdownDescription: "Project role for the service account. Supported values are member and owner.", Validators: []validator.String{serviceAccountRoleValidator{}}},
 			"created_at": resourceschema.Int64Attribute{Computed: true, MarkdownDescription: "Unix timestamp for service-account creation."},
+		},
+	}
+}
+
+func (r *serviceAccountResource) UpgradeState(_ context.Context) map[int64]resource.StateUpgrader {
+	return map[int64]resource.StateUpgrader{
+		0: {
+			PriorSchema: serviceAccountResourceV0Schema(),
+			StateUpgrader: func(ctx context.Context, req resource.UpgradeStateRequest, resp *resource.UpgradeStateResponse) {
+				var prior serviceAccountResourceModel
+				resp.Diagnostics.Append(req.State.Get(ctx, &prior)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+				resp.State.Schema = serviceAccountResourceCurrentSchema()
+				resp.Diagnostics.Append(resp.State.Set(ctx, &prior)...)
+			},
 		},
 	}
 }
@@ -140,8 +160,8 @@ func (r *serviceAccountResource) ImportState(ctx context.Context, req resource.I
 		resp.Diagnostics.AddError("Invalid import ID", err.Error())
 		return
 	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), projectID)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), serviceAccountID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), types.StringValue(projectID))...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(serviceAccountID))...)
 }
 
 func serviceAccountModelFromAPI(account *client.ServiceAccount, projectID string) serviceAccountResourceModel {
@@ -161,4 +181,36 @@ func validServiceAccountRole(role string) bool {
 	default:
 		return false
 	}
+}
+
+func serviceAccountResourceCurrentSchema() resourceschema.Schema {
+	var resp resource.SchemaResponse
+	NewServiceAccountResource().Schema(context.Background(), resource.SchemaRequest{}, &resp)
+	return resp.Schema
+}
+
+func serviceAccountResourceV0Schema() *resourceschema.Schema {
+	schema := serviceAccountResourceCurrentSchema()
+	schema.Version = 0
+	roleAttr := schema.Attributes["role"].(resourceschema.StringAttribute)
+	roleAttr.Validators = nil
+	schema.Attributes["role"] = roleAttr
+	return &schema
+}
+
+type serviceAccountRoleValidator struct{}
+
+func (serviceAccountRoleValidator) Description(_ context.Context) string {
+	return "value must be one of: member, owner"
+}
+
+func (v serviceAccountRoleValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (serviceAccountRoleValidator) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() || validServiceAccountRole(req.ConfigValue.ValueString()) {
+		return
+	}
+	resp.Diagnostics.AddAttributeError(req.Path, "Invalid OpenAI service account role", "Supported values are member and owner.")
 }

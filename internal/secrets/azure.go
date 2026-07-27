@@ -25,25 +25,25 @@ func NewAzureResolverWithClient(cfg AzureConfig, cl azureSecretClient) *AzureRes
 	return &AzureResolver{cfg: cfg, newClient: func(context.Context, AzureConfig) (azureSecretClient, error) { return cl, nil }}
 }
 
-func (r *AzureResolver) Resolve(ctx context.Context) (string, error) {
+func (r *AzureResolver) Resolve(ctx context.Context) (Settings, error) {
 	if r.cfg.VaultURL == "" {
-		return "", fmt.Errorf("azure_key_vault.vault_url is required")
+		return Settings{}, fmt.Errorf("azure_key_vault.vault_url is required")
 	}
 	if r.cfg.SecretName == "" {
-		return "", fmt.Errorf("azure_key_vault.secret_name is required")
+		return Settings{}, fmt.Errorf("azure_key_vault.secret_name is required")
 	}
 	cl, err := r.newClient(ctx, r.cfg)
 	if err != nil {
-		return "", fmt.Errorf("create Azure Key Vault client: %w", err)
+		return Settings{}, fmt.Errorf("create Azure Key Vault client: %w", err)
 	}
 	out, err := cl.GetSecret(ctx, r.cfg.SecretName, r.cfg.Version, nil)
 	if err != nil {
-		return "", fmt.Errorf("read Azure Key Vault secret: %w", err)
+		return Settings{}, fmt.Errorf("read Azure Key Vault secret: %w", err)
 	}
 	if out.Value == nil {
-		return "", fmt.Errorf("Azure Key Vault secret value is empty")
+		return Settings{}, fmt.Errorf("Azure Key Vault secret value is empty")
 	}
-	return extractSecretValue(*out.Value, r.cfg.JSONKey)
+	return extractSecretSettings(*out.Value, r.cfg.JSONKey)
 }
 
 func newAzureSecretClient(_ context.Context, cfg AzureConfig) (azureSecretClient, error) {

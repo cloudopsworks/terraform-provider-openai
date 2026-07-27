@@ -4,31 +4,44 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 )
 
 func TestNewResolverExactlyOneSource(t *testing.T) {
 	ctx := context.Background()
-	resolver, source, err := NewResolver(SourceConfig{Direct: " sk-admin "})
+	resolver, source, err := NewResolver(SourceConfig{Direct: Settings{AdminAPIKey: " sk-admin ", BaseURL: " https://api.example/v1 ", OrganizationID: " org_1 ", ProjectID: " proj_1 "}})
 	if err != nil {
 		t.Fatalf("NewResolver direct: %v", err)
 	}
 	if source != "configuration" {
 		t.Fatalf("source = %q", source)
 	}
-	value, err := resolver.Resolve(ctx)
-	if err != nil || value != "sk-admin" {
-		t.Fatalf("Resolve() = %q, %v", value, err)
+	settings, err := resolver.Resolve(ctx)
+	if err != nil || settings.AdminAPIKey != "sk-admin" || settings.BaseURL != "https://api.example/v1" || settings.OrganizationID != "org_1" || settings.ProjectID != "proj_1" {
+		t.Fatalf("Resolve() = %#v, %v", settings, err)
 	}
 
 	if _, _, err := NewResolver(SourceConfig{}); err == nil {
 		t.Fatal("expected missing source error")
 	}
-	if _, _, err := NewResolver(SourceConfig{Direct: "sk", AWS: &AWSConfig{SecretID: "s"}}); err == nil {
-		t.Fatal("expected multiple source error")
+	resolver, source, err = NewResolver(SourceConfig{Direct: Settings{AdminAPIKey: "sk-direct"}, AWS: &AWSConfig{SecretID: "s"}})
+	if err != nil {
+		t.Fatalf("direct should take precedence over secret source: %v", err)
+	}
+	settings, err = resolver.Resolve(ctx)
+	if err != nil || source != "configuration" || settings.AdminAPIKey != "sk-direct" {
+		t.Fatalf("direct precedence Resolve() = %#v source=%q err=%v", settings, source, err)
+	}
+	if _, _, err := NewResolver(SourceConfig{AWS: &AWSConfig{SecretID: "s"}, GCP: &GCPConfig{ProjectID: "p", SecretID: "s"}}); err == nil {
+		t.Fatal("expected multiple cloud source error")
 	}
 }
 
@@ -63,6 +76,26 @@ func TestExtractSecretValue(t *testing.T) {
 	}
 }
 
+func TestExtractSecretSettings(t *testing.T) {
+	settings, err := extractSecretSettings(`{"api_key":" sk-json ","base_url":" https://api.example/v1/ ","organization_id":" org_1 ","project_id":" proj_1 "}`, "")
+	if err != nil {
+		t.Fatalf("extractSecretSettings() error = %v", err)
+	}
+	if settings.AdminAPIKey != "sk-json" || settings.BaseURL != "https://api.example/v1/" || settings.OrganizationID != "org_1" || settings.ProjectID != "proj_1" {
+		t.Fatalf("settings = %#v", settings)
+	}
+	settings, err = extractSecretSettings(" sk-plain ", "")
+	if err != nil || settings.AdminAPIKey != "sk-plain" {
+		t.Fatalf("plaintext settings = %#v, %v", settings, err)
+	}
+	if _, err := extractSecretSettings(`{"base_url":"https://api.example/v1"}`, ""); err == nil {
+		t.Fatal("expected missing admin key error")
+	}
+	if _, err := extractSecretSettings(`{"api_key":`, ""); err == nil {
+		t.Fatal("expected malformed JSON error")
+	}
+}
+
 type fakeAWSClient struct {
 	out *secretsmanager.GetSecretValueOutput
 	err error
@@ -80,8 +113,8 @@ func TestAWSResolverWithMockedClient(t *testing.T) {
 	client := &fakeAWSClient{out: &secretsmanager.GetSecretValueOutput{SecretString: &secret}}
 	resolver := NewAWSResolverWithClient(AWSConfig{SecretID: "secret/openai", VersionID: version, JSONKey: "key"}, client)
 	got, err := resolver.Resolve(context.Background())
-	if err != nil || got != "sk-aws" {
-		t.Fatalf("Resolve() = %q, %v", got, err)
+	if err != nil || got.AdminAPIKey != "sk-aws" {
+		t.Fatalf("Resolve() = %#v, %v", got, err)
 	}
 	if client.in == nil || *client.in.SecretId != "secret/openai" || *client.in.VersionId != version {
 		t.Fatalf("unexpected AWS input: %#v", client.in)
@@ -95,6 +128,121 @@ func TestAWSResolverErrors(t *testing.T) {
 	boom := errors.New("boom")
 	if _, err := NewAWSResolverWithClient(AWSConfig{SecretID: "s"}, &fakeAWSClient{err: boom}).Resolve(context.Background()); err == nil {
 		t.Fatal("expected SDK error")
+	}
+}
+
+func TestAWSSecretsManagerClientUsesDefaultConfigWithoutRole(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "test-access-key")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret-key")
+	t.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+
+	client, err := newAWSSecretsManagerClient(context.Background(), AWSConfig{SecretID: "s"})
+	if err != nil {
+		t.Fatalf("newAWSSecretsManagerClient() error = %v", err)
+	}
+	if client == nil {
+		t.Fatal("newAWSSecretsManagerClient() returned nil client")
+	}
+}
+
+type fakeSTSClient struct {
+	in *sts.AssumeRoleInput
+}
+
+func (f *fakeSTSClient) AssumeRole(ctx context.Context, in *sts.AssumeRoleInput, _ ...func(*sts.Options)) (*sts.AssumeRoleOutput, error) {
+	f.in = in
+	return &sts.AssumeRoleOutput{
+		Credentials: &ststypes.Credentials{
+			AccessKeyId:     aws.String("assumed-key"),
+			SecretAccessKey: aws.String("assumed-secret"),
+			SessionToken:    aws.String("assumed-token"),
+			Expiration:      aws.Time(time.Now().Add(time.Hour)),
+		},
+	}, nil
+}
+
+func TestLoadAWSConfigAssumeRoleUsesDefaultConfigAsSource(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "base-key")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "base-secret")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+
+	originalNewSTSClient := newSTSAssumeRoleClient
+	defer func() { newSTSAssumeRoleClient = originalNewSTSClient }()
+
+	var captured aws.Config
+	stsClient := &fakeSTSClient{}
+	newSTSAssumeRoleClient = func(cfg aws.Config) stscreds.AssumeRoleAPIClient {
+		captured = cfg
+		return stsClient
+	}
+
+	got, err := loadAWSConfig(context.Background(), AWSConfig{
+		Region:          "us-east-1",
+		RoleARN:         "arn:aws:iam::123456789012:role/openai-secrets",
+		RoleSessionName: "terraform-provider-openai",
+		ExternalID:      "external-1",
+		DurationSeconds: 900,
+	})
+	if err != nil {
+		t.Fatalf("loadAWSConfig() error = %v", err)
+	}
+	if captured.Region != "us-east-1" {
+		t.Fatalf("captured base region = %q", captured.Region)
+	}
+	baseCreds, err := captured.Credentials.Retrieve(context.Background())
+	if err != nil {
+		t.Fatalf("captured base credentials retrieve: %v", err)
+	}
+	if baseCreds.AccessKeyID != "base-key" {
+		t.Fatalf("base credential access key = %q", baseCreds.AccessKeyID)
+	}
+	if _, ok := got.Credentials.(*aws.CredentialsCache); !ok {
+		t.Fatalf("assume-role config credentials type = %T, want *aws.CredentialsCache", got.Credentials)
+	}
+	assumedCreds, err := got.Credentials.Retrieve(context.Background())
+	if err != nil {
+		t.Fatalf("assume-role credentials retrieve: %v", err)
+	}
+	if assumedCreds.AccessKeyID != "assumed-key" {
+		t.Fatalf("assume-role access key = %q", assumedCreds.AccessKeyID)
+	}
+	if stsClient.in == nil {
+		t.Fatal("expected STS AssumeRole call")
+	}
+	if got := aws.ToString(stsClient.in.RoleArn); got != "arn:aws:iam::123456789012:role/openai-secrets" {
+		t.Fatalf("AssumeRole RoleArn = %q", got)
+	}
+	if got := aws.ToString(stsClient.in.RoleSessionName); got != "terraform-provider-openai" {
+		t.Fatalf("AssumeRole RoleSessionName = %q", got)
+	}
+	if got := aws.ToString(stsClient.in.ExternalId); got != "external-1" {
+		t.Fatalf("AssumeRole ExternalId = %q", got)
+	}
+	if stsClient.in.DurationSeconds == nil || *stsClient.in.DurationSeconds != 900 {
+		t.Fatalf("AssumeRole DurationSeconds = %v, want 900", stsClient.in.DurationSeconds)
+	}
+}
+
+func TestLoadAWSConfigWithoutRoleARNDoesNotCreateSTSClient(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "base-key")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "base-secret")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+
+	originalNewSTSClient := newSTSAssumeRoleClient
+	defer func() { newSTSAssumeRoleClient = originalNewSTSClient }()
+
+	called := false
+	newSTSAssumeRoleClient = func(cfg aws.Config) stscreds.AssumeRoleAPIClient {
+		called = true
+		return &fakeSTSClient{}
+	}
+
+	if _, err := loadAWSConfig(context.Background(), AWSConfig{Region: "us-east-1"}); err != nil {
+		t.Fatalf("loadAWSConfig() error = %v", err)
+	}
+	if called {
+		t.Fatal("STS client was created without role_arn")
 	}
 }
 
@@ -115,8 +263,8 @@ func TestGCPResolverWithMockedClient(t *testing.T) {
 	client := &fakeGCPClient{out: &secretmanagerpb.AccessSecretVersionResponse{Payload: &secretmanagerpb.SecretPayload{Data: []byte(`{"key":"sk-gcp"}`)}}}
 	resolver := NewGCPResolverWithClient(GCPConfig{ProjectID: "p", SecretID: "openai", JSONKey: "key"}, client)
 	got, err := resolver.Resolve(context.Background())
-	if err != nil || got != "sk-gcp" {
-		t.Fatalf("Resolve() = %q, %v", got, err)
+	if err != nil || got.AdminAPIKey != "sk-gcp" {
+		t.Fatalf("Resolve() = %#v, %v", got, err)
 	}
 	if client.name != "projects/p/secrets/openai/versions/latest" || !client.closed {
 		t.Fatalf("unexpected GCP request: name=%q closed=%v", client.name, client.closed)
@@ -150,8 +298,8 @@ func TestAzureResolverWithMockedClient(t *testing.T) {
 	client := &fakeAzureClient{out: azsecrets.GetSecretResponse{Secret: azsecrets.Secret{Value: &value}}}
 	resolver := NewAzureResolverWithClient(AzureConfig{VaultURL: "https://vault.example", SecretName: "openai", Version: "42", JSONKey: "key"}, client)
 	got, err := resolver.Resolve(context.Background())
-	if err != nil || got != "sk-azure" {
-		t.Fatalf("Resolve() = %q, %v", got, err)
+	if err != nil || got.AdminAPIKey != "sk-azure" {
+		t.Fatalf("Resolve() = %#v, %v", got, err)
 	}
 	if client.name != "openai" || client.version != "42" {
 		t.Fatalf("unexpected Azure request: %q %q", client.name, client.version)

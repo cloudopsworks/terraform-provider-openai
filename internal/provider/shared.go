@@ -34,6 +34,20 @@ func int64OrNull(value int64) types.Int64 {
 	return types.Int64Value(value)
 }
 
+func int64Value(value types.Int64) int64 {
+	if value.IsNull() || value.IsUnknown() {
+		return 0
+	}
+	return value.ValueInt64()
+}
+
+func boolValue(value types.Bool) bool {
+	if value.IsNull() || value.IsUnknown() {
+		return false
+	}
+	return value.ValueBool()
+}
+
 func setStringValueOrNull(ctx context.Context, values []string) (types.Set, diag.Diagnostics) {
 	if len(values) == 0 {
 		return types.SetNull(types.StringType), nil

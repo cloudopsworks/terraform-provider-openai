@@ -3,9 +3,12 @@ package secrets
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
+	"google.golang.org/api/impersonate"
+	"google.golang.org/api/option"
 )
 
 type gcpSecretManagerClient interface {
@@ -32,12 +35,12 @@ func NewGCPResolverWithClient(cfg GCPConfig, cl gcpSecretManagerClient) *GCPReso
 	return &GCPResolver{cfg: cfg, newClient: func(context.Context, GCPConfig) (gcpSecretManagerClient, error) { return cl, nil }}
 }
 
-func (r *GCPResolver) Resolve(ctx context.Context) (string, error) {
+func (r *GCPResolver) Resolve(ctx context.Context) (Settings, error) {
 	if r.cfg.ProjectID == "" {
-		return "", fmt.Errorf("gcp_secret_manager.project_id is required")
+		return Settings{}, fmt.Errorf("gcp_secret_manager.project_id is required")
 	}
 	if r.cfg.SecretID == "" {
-		return "", fmt.Errorf("gcp_secret_manager.secret_id is required")
+		return Settings{}, fmt.Errorf("gcp_secret_manager.secret_id is required")
 	}
 	version := r.cfg.Version
 	if version == "" {
@@ -45,22 +48,40 @@ func (r *GCPResolver) Resolve(ctx context.Context) (string, error) {
 	}
 	cl, err := r.newClient(ctx, r.cfg)
 	if err != nil {
-		return "", fmt.Errorf("create GCP Secret Manager client: %w", err)
+		return Settings{}, fmt.Errorf("create GCP Secret Manager client: %w", err)
 	}
 	defer cl.Close()
 	name := fmt.Sprintf("projects/%s/secrets/%s/versions/%s", r.cfg.ProjectID, r.cfg.SecretID, version)
 	out, err := cl.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{Name: name})
 	if err != nil {
-		return "", fmt.Errorf("read GCP Secret Manager secret: %w", err)
+		return Settings{}, fmt.Errorf("read GCP Secret Manager secret: %w", err)
 	}
 	if out == nil || out.Payload == nil {
-		return "", fmt.Errorf("GCP Secret Manager secret payload is empty")
+		return Settings{}, fmt.Errorf("GCP Secret Manager secret payload is empty")
 	}
-	return extractSecretValue(string(out.Payload.Data), r.cfg.JSONKey)
+	return extractSecretSettings(string(out.Payload.Data), r.cfg.JSONKey)
 }
 
-func newGCPSecretManagerClient(ctx context.Context, _ GCPConfig) (gcpSecretManagerClient, error) {
-	cl, err := secretmanager.NewClient(ctx)
+func newGCPSecretManagerClient(ctx context.Context, cfg GCPConfig) (gcpSecretManagerClient, error) {
+	var opts []option.ClientOption
+	scopes := cfg.Scopes
+	if len(scopes) == 0 {
+		scopes = secretmanager.DefaultAuthScopes()
+	} else {
+		opts = append(opts, option.WithScopes(scopes...))
+	}
+	if target := strings.TrimSpace(cfg.ImpersonateServiceAccount); target != "" {
+		tokenSource, err := impersonate.CredentialsTokenSource(ctx, impersonate.CredentialsConfig{
+			TargetPrincipal: target,
+			Scopes:          scopes,
+			Delegates:       cfg.Delegates,
+		}, opts...)
+		if err != nil {
+			return nil, err
+		}
+		opts = []option.ClientOption{option.WithTokenSource(tokenSource)}
+	}
+	cl, err := secretmanager.NewClient(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}

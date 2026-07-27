@@ -29,8 +29,8 @@ github_repo: cloudopsworks/terraform-provider-openai
 description: |-
   Terraform/OpenTofu provider for OpenAI Administration APIs. V1 manages projects,
   project service accounts, and service-account project API keys using an existing
-  OpenAI admin API key supplied directly or resolved from AWS Secrets Manager,
-  Google Secret Manager, or Azure Key Vault.
+  OpenAI admin API key supplied directly, from OpenAI environment variables,
+  or resolved from AWS Secrets Manager, Google Secret Manager, or Azure Key Vault.
 
 introduction: |-
   This provider turns a small but important OpenAI organization bootstrap path into
@@ -38,44 +38,77 @@ introduction: |-
   issue the service account's project API key.
 
   V1 intentionally does not manage organization-level admin API key lifecycle.
-  It consumes an existing admin key and can resolve it from a cloud secret manager
-  without storing that resolved key in Terraform state.
+  It consumes an existing admin key from provider configuration, OpenAI environment
+  variables, or a cloud secret manager without storing that resolved key in Terraform
+  state.
 
 usage: |-
   ## Provider configuration
 
-  Exactly one admin-key source must be configured.
+  The provider resolves OpenAI initialization settings in this precedence order:
+
+  1. Explicit provider arguments: `admin_api_key`, `base_url`, `organization_id`, and `project_id`.
+  2. OpenAI environment variables: `OPENAI_ADMIN_KEY`, `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, and `OPENAI_PROJECT_ID`.
+  3. One cloud secret source when no direct/admin environment key is present.
+
+  Secret payloads may be either plaintext (the admin API key) or a JSON object.
+  JSON payloads can include `admin_api_key` or `api_key`, plus optional
+  `base_url`, `organization_id`, and `project_id`; explicit provider arguments
+  and OpenAI environment variables still win for fields they set.
+
+  Direct configuration:
 
   ```hcl
   provider "openai" {
-    admin_api_key = var.openai_admin_api_key
+    admin_api_key   = var.openai_admin_api_key
+    organization_id = var.openai_org_id
+    project_id      = var.openai_project_id
   }
   ```
 
-  AWS Secrets Manager:
+  AWS Secrets Manager with an assumed role:
 
   ```hcl
   provider "openai" {
     aws_secrets_manager = {
-      region    = "us-east-1"
-      secret_id = "prod/openai/admin"
-      json_key  = "admin_api_key"
+      region            = "us-east-1"
+      secret_id         = "prod/openai/admin"
+      role_arn          = "arn:aws:iam::123456789012:role/openai-secret-reader"
+      role_session_name = "terraform-provider-openai"
+      external_id       = var.aws_external_id
+      json_key          = "admin_api_key"
     }
   }
   ```
 
-  GCP Secret Manager:
+  The AWS source uses the standard AWS SDK credential chain as the base
+  credential and supports environment discovery with variables such as
+  `OPENAI_AWS_SECRETS_MANAGER_SECRET_ID`, `OPENAI_AWS_SECRETS_MANAGER_REGION`,
+  `OPENAI_AWS_SECRETS_MANAGER_ROLE_ARN`, and
+  `OPENAI_AWS_SECRETS_MANAGER_JSON_KEY`. Raw AWS access keys are not provider
+  arguments.
+
+  GCP Secret Manager with service-account impersonation:
 
   ```hcl
   provider "openai" {
     gcp_secret_manager = {
-      project_id = "platform-prod"
-      secret_id  = "openai-admin-key"
-      version    = "latest"
-      json_key   = "admin_api_key"
+      project_id                  = "platform-prod"
+      secret_id                   = "openai-admin-key"
+      version                     = "latest"
+      impersonate_service_account = "openai-secret-reader@platform-prod.iam.gserviceaccount.com"
+      json_key                    = "admin_api_key"
     }
   }
   ```
+
+  The GCP source uses Application Default Credentials as the base credential and
+  can impersonate a service account. Environment discovery uses variables such
+  as `OPENAI_GCP_SECRET_MANAGER_PROJECT_ID`,
+  `OPENAI_GCP_SECRET_MANAGER_SECRET_ID`,
+  `OPENAI_GCP_SECRET_MANAGER_IMPERSONATE_SERVICE_ACCOUNT`, and
+  `OPENAI_GCP_SECRET_MANAGER_JSON_KEY`. Raw service-account JSON is not a
+  provider argument.
 
   Azure Key Vault:
 
@@ -88,6 +121,12 @@ usage: |-
     }
   }
   ```
+
+  When no direct admin key is configured, configure only one cloud secret source.
+  If AWS and GCP secret discovery are both complete, provider configuration fails
+  with a deterministic conflict diagnostic. Malformed JSON payloads and missing
+  selected `json_key` fields are hard diagnostics; optional JSON fields simply
+  fall back to explicit provider arguments, environment variables, or defaults.
 
   ## Bootstrap one internal application
 

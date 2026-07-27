@@ -138,9 +138,9 @@ func (r *projectAPIKeyResource) ImportState(ctx context.Context, req resource.Im
 		resp.Diagnostics.AddError("Invalid import ID", err.Error())
 		return
 	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), projectID)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("service_account_id"), serviceAccountID)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), apiKeyID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), types.StringValue(projectID))...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("service_account_id"), types.StringValue(serviceAccountID))...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(apiKeyID))...)
 }
 
 func projectAPIKeyModelFromCreate(ctx context.Context, created *client.ServiceAccountAPIKeyCreateResponse, plan projectAPIKeyResourceModel) projectAPIKeyResourceModel {

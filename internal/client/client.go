@@ -18,16 +18,43 @@ type OpenAIAdminClient struct {
 	client openai.Client
 }
 
+type Settings struct {
+	AdminAPIKey    string
+	BaseURL        string
+	OrganizationID string
+	ProjectID      string
+}
+
 func New(adminAPIKey, baseURL, userAgent string, timeout time.Duration) *OpenAIAdminClient {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
-	opts := []option.RequestOption{
-		option.WithAdminAPIKey(adminAPIKey),
-		option.WithHTTPClient(&http.Client{Timeout: timeout}),
+	return NewWithSettings(Settings{AdminAPIKey: adminAPIKey, BaseURL: baseURL}, userAgent, timeout)
+}
+
+func NewWithSettings(settings Settings, userAgent string, timeout time.Duration) *OpenAIAdminClient {
+	if timeout <= 0 {
+		timeout = 30 * time.Second
 	}
-	if strings.TrimSpace(baseURL) != "" {
-		opts = append(opts, option.WithBaseURL(strings.TrimRight(baseURL, "/")))
+	return newWithHTTPClient(settings, userAgent, &http.Client{Timeout: timeout})
+}
+
+func newWithHTTPClient(settings Settings, userAgent string, httpClient *http.Client) *OpenAIAdminClient {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	opts := []option.RequestOption{
+		option.WithAdminAPIKey(settings.AdminAPIKey),
+		option.WithHTTPClient(httpClient),
+	}
+	if strings.TrimSpace(settings.BaseURL) != "" {
+		opts = append(opts, option.WithBaseURL(strings.TrimRight(settings.BaseURL, "/")))
+	}
+	if strings.TrimSpace(settings.OrganizationID) != "" {
+		opts = append(opts, option.WithOrganization(strings.TrimSpace(settings.OrganizationID)))
+	}
+	if strings.TrimSpace(settings.ProjectID) != "" {
+		opts = append(opts, option.WithProject(strings.TrimSpace(settings.ProjectID)))
 	}
 	if strings.TrimSpace(userAgent) != "" {
 		opts = append(opts, option.WithHeader("User-Agent", userAgent))
@@ -56,6 +83,36 @@ func (c *OpenAIAdminClient) GetProject(ctx context.Context, id string) (*Project
 		return nil, err
 	}
 	return mapProject(project)
+}
+
+func (c *OpenAIAdminClient) ListProjects(ctx context.Context, req ProjectListRequest) (*ProjectListResponse, error) {
+	params := openai.AdminOrganizationProjectListParams{}
+	if req.After != "" {
+		params.After = openai.String(req.After)
+	}
+	if req.Limit > 0 {
+		params.Limit = openai.Int(req.Limit)
+	}
+	if req.IncludeArchived {
+		params.IncludeArchived = openai.Bool(true)
+	}
+	page, err := c.client.Admin.Organization.Projects.List(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	resp := &ProjectListResponse{
+		Items:   make([]Project, 0, len(page.Data)),
+		HasMore: page.HasMore,
+		LastID:  page.LastID,
+	}
+	for _, project := range page.Data {
+		mapped, err := mapProject(&project)
+		if err != nil {
+			return nil, err
+		}
+		resp.Items = append(resp.Items, *mapped)
+	}
+	return resp, nil
 }
 
 func (c *OpenAIAdminClient) UpdateProject(ctx context.Context, id string, req ProjectUpdateRequest) (*Project, error) {
@@ -93,7 +150,7 @@ func (c *OpenAIAdminClient) CreateServiceAccount(ctx context.Context, projectID 
 	if err != nil {
 		return nil, err
 	}
-	account := &ServiceAccount{ID: created.ID, Name: created.Name, Role: string(created.Role), CreatedAt: created.CreatedAt}
+	account := mapServiceAccount(created.ID, created.Name, string(created.Role), created.CreatedAt)
 	if err := validateServiceAccount(account); err != nil {
 		return nil, err
 	}
@@ -108,11 +165,38 @@ func (c *OpenAIAdminClient) GetServiceAccount(ctx context.Context, projectID, se
 	if err != nil {
 		return nil, err
 	}
-	mapped := &ServiceAccount{ID: account.ID, Name: account.Name, Role: string(account.Role), CreatedAt: account.CreatedAt}
+	mapped := mapServiceAccount(account.ID, account.Name, string(account.Role), account.CreatedAt)
 	if err := validateServiceAccount(mapped); err != nil {
 		return nil, err
 	}
 	return mapped, nil
+}
+
+func (c *OpenAIAdminClient) ListServiceAccounts(ctx context.Context, projectID string, req ServiceAccountListRequest) (*ServiceAccountListResponse, error) {
+	params := openai.AdminOrganizationProjectServiceAccountListParams{}
+	if req.After != "" {
+		params.After = openai.String(req.After)
+	}
+	if req.Limit > 0 {
+		params.Limit = openai.Int(req.Limit)
+	}
+	page, err := c.client.Admin.Organization.Projects.ServiceAccounts.List(ctx, projectID, params)
+	if err != nil {
+		return nil, err
+	}
+	resp := &ServiceAccountListResponse{
+		Items:   make([]ServiceAccount, 0, len(page.Data)),
+		HasMore: page.HasMore,
+		LastID:  page.LastID,
+	}
+	for _, account := range page.Data {
+		mapped := mapServiceAccount(account.ID, account.Name, string(account.Role), account.CreatedAt)
+		if err := validateServiceAccount(mapped); err != nil {
+			return nil, err
+		}
+		resp.Items = append(resp.Items, *mapped)
+	}
+	return resp, nil
 }
 
 func (c *OpenAIAdminClient) UpdateServiceAccount(ctx context.Context, projectID, serviceAccountID string, req ServiceAccountUpdateRequest) (*ServiceAccount, error) {
@@ -130,7 +214,7 @@ func (c *OpenAIAdminClient) UpdateServiceAccount(ctx context.Context, projectID,
 	if err != nil {
 		return nil, err
 	}
-	mapped := &ServiceAccount{ID: account.ID, Name: account.Name, Role: string(account.Role), CreatedAt: account.CreatedAt}
+	mapped := mapServiceAccount(account.ID, account.Name, string(account.Role), account.CreatedAt)
 	if err := validateServiceAccount(mapped); err != nil {
 		return nil, err
 	}
@@ -229,6 +313,10 @@ func mapProject(project *openai.Project) (*Project, error) {
 		return nil, err
 	}
 	return mapped, nil
+}
+
+func mapServiceAccount(id, name, role string, createdAt int64) *ServiceAccount {
+	return &ServiceAccount{ID: id, Name: name, Role: role, CreatedAt: createdAt}
 }
 
 func validateServiceAccount(account *ServiceAccount) error {

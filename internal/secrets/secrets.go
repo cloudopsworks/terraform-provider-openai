@@ -9,33 +9,47 @@ import (
 )
 
 type Resolver interface {
-	Resolve(ctx context.Context) (string, error)
+	Resolve(ctx context.Context) (Settings, error)
 }
 
-type ResolverFunc func(context.Context) (string, error)
+type ResolverFunc func(context.Context) (Settings, error)
 
-func (f ResolverFunc) Resolve(ctx context.Context) (string, error) { return f(ctx) }
+func (f ResolverFunc) Resolve(ctx context.Context) (Settings, error) { return f(ctx) }
+
+type Settings struct {
+	AdminAPIKey    string
+	BaseURL        string
+	OrganizationID string
+	ProjectID      string
+}
 
 type SourceConfig struct {
-	Direct string
+	Direct Settings
 	AWS    *AWSConfig
 	GCP    *GCPConfig
 	Azure  *AzureConfig
 }
 
 type AWSConfig struct {
-	Region       string
-	SecretID     string
-	VersionID    string
-	VersionStage string
-	JSONKey      string
+	Region          string
+	SecretID        string
+	VersionID       string
+	VersionStage    string
+	JSONKey         string
+	RoleARN         string
+	RoleSessionName string
+	ExternalID      string
+	DurationSeconds int64
 }
 
 type GCPConfig struct {
-	ProjectID string
-	SecretID  string
-	Version   string
-	JSONKey   string
+	ProjectID                 string
+	SecretID                  string
+	Version                   string
+	JSONKey                   string
+	ImpersonateServiceAccount string
+	Delegates                 []string
+	Scopes                    []string
 }
 
 type AzureConfig struct {
@@ -46,6 +60,11 @@ type AzureConfig struct {
 }
 
 func NewResolver(cfg SourceConfig) (Resolver, string, error) {
+	if strings.TrimSpace(cfg.Direct.AdminAPIKey) != "" {
+		settings := cfg.Direct.Trimmed()
+		return ResolverFunc(func(context.Context) (Settings, error) { return settings, nil }), "configuration", nil
+	}
+
 	sources := configuredSources(cfg)
 	if len(sources) == 0 {
 		return nil, "none", fmt.Errorf("missing OpenAI admin API key source: set admin_api_key or configure exactly one of aws_secrets_manager, gcp_secret_manager, or azure_key_vault")
@@ -55,9 +74,6 @@ func NewResolver(cfg SourceConfig) (Resolver, string, error) {
 	}
 
 	switch sources[0] {
-	case "configuration":
-		value := strings.TrimSpace(cfg.Direct)
-		return ResolverFunc(func(context.Context) (string, error) { return value, nil }), "configuration", nil
 	case "aws_secrets_manager":
 		return NewAWSResolver(*cfg.AWS), "aws_secrets_manager", nil
 	case "gcp_secret_manager":
@@ -71,7 +87,7 @@ func NewResolver(cfg SourceConfig) (Resolver, string, error) {
 
 func configuredSources(cfg SourceConfig) []string {
 	var sources []string
-	if strings.TrimSpace(cfg.Direct) != "" {
+	if strings.TrimSpace(cfg.Direct.AdminAPIKey) != "" {
 		sources = append(sources, "configuration")
 	}
 	if cfg.AWS != nil {
@@ -84,6 +100,86 @@ func configuredSources(cfg SourceConfig) []string {
 		sources = append(sources, "azure_key_vault")
 	}
 	return sources
+}
+
+func (s Settings) Trimmed() Settings {
+	return Settings{
+		AdminAPIKey:    strings.TrimSpace(s.AdminAPIKey),
+		BaseURL:        strings.TrimSpace(s.BaseURL),
+		OrganizationID: strings.TrimSpace(s.OrganizationID),
+		ProjectID:      strings.TrimSpace(s.ProjectID),
+	}
+}
+
+func (s Settings) MergeFallback(fallback Settings) Settings {
+	s = s.Trimmed()
+	fallback = fallback.Trimmed()
+	if s.AdminAPIKey == "" {
+		s.AdminAPIKey = fallback.AdminAPIKey
+	}
+	if s.BaseURL == "" {
+		s.BaseURL = fallback.BaseURL
+	}
+	if s.OrganizationID == "" {
+		s.OrganizationID = fallback.OrganizationID
+	}
+	if s.ProjectID == "" {
+		s.ProjectID = fallback.ProjectID
+	}
+	return s
+}
+
+func extractSecretSettings(raw, jsonKey string) (Settings, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return Settings{}, fmt.Errorf("secret value is empty")
+	}
+	if strings.TrimSpace(jsonKey) != "" {
+		apiKey, err := extractSecretValue(value, jsonKey)
+		if err != nil {
+			return Settings{}, err
+		}
+		return Settings{AdminAPIKey: apiKey}.Trimmed(), nil
+	}
+
+	if strings.HasPrefix(value, "{") {
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(value), &decoded); err != nil {
+			return Settings{}, fmt.Errorf("secret value is not valid JSON: %w", err)
+		}
+		settings := Settings{
+			AdminAPIKey:    firstStringValue(decoded, "admin_api_key", "openai_admin_key", "openai_admin_api_key", "api_key", "OPENAI_ADMIN_KEY"),
+			BaseURL:        firstStringValue(decoded, "base_url", "openai_base_url", "OPENAI_BASE_URL"),
+			OrganizationID: firstStringValue(decoded, "organization_id", "org_id", "organization", "openai_org_id", "OPENAI_ORG_ID"),
+			ProjectID:      firstStringValue(decoded, "project_id", "project", "openai_project_id", "OPENAI_PROJECT_ID"),
+		}.Trimmed()
+		if settings.AdminAPIKey == "" {
+			return Settings{}, fmt.Errorf("secret JSON object does not contain a non-empty admin_api_key/api_key field")
+		}
+		return settings, nil
+	}
+	if strings.HasPrefix(value, "[") {
+		return Settings{}, fmt.Errorf("secret value JSON must be an object when json_key is not configured")
+	}
+
+	return Settings{AdminAPIKey: value}.Trimmed(), nil
+}
+
+func firstStringValue(object map[string]any, keys ...string) string {
+	for _, key := range keys {
+		raw, ok := object[key]
+		if !ok {
+			continue
+		}
+		value, ok := raw.(string)
+		if !ok {
+			continue
+		}
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func extractSecretValue(raw, jsonKey string) (string, error) {
@@ -123,10 +219,18 @@ func extractSecretValue(raw, jsonKey string) (string, error) {
 }
 
 func bytesSecretValue(data []byte, jsonKey string) (string, error) {
+	settings, err := bytesSecretSettings(data, jsonKey)
+	if err != nil {
+		return "", err
+	}
+	return settings.AdminAPIKey, nil
+}
+
+func bytesSecretSettings(data []byte, jsonKey string) (Settings, error) {
 	if len(data) == 0 {
-		return "", fmt.Errorf("secret binary value is empty")
+		return Settings{}, fmt.Errorf("secret binary value is empty")
 	}
 	decoded := make([]byte, base64.StdEncoding.EncodedLen(len(data)))
 	base64.StdEncoding.Encode(decoded, data)
-	return extractSecretValue(string(decoded), jsonKey)
+	return extractSecretSettings(string(decoded), jsonKey)
 }
