@@ -10,7 +10,6 @@ import (
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -34,7 +33,6 @@ type adminAPIKeyResourceModel struct {
 	ExpiresInSeconds types.Int64  `tfsdk:"expires_in_seconds"`
 	ExpireInHours    types.Int64  `tfsdk:"expire_in_hours"`
 	ExpireInDays     types.Int64  `tfsdk:"expire_in_days"`
-	Scopes           types.Set    `tfsdk:"scopes"`
 	Value            types.String `tfsdk:"value"`
 	RedactedValue    types.String `tfsdk:"redacted_value"`
 	OwnerType        types.String `tfsdk:"owner_type"`
@@ -61,7 +59,6 @@ func (r *adminAPIKeyResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"expires_in_seconds": resourceschema.Int64Attribute{Optional: true, MarkdownDescription: "Optional number of seconds until the admin API key expires. Omit all expiration fields for a non-expiring key. Mutually exclusive with expire_in_hours and expire_in_days. Changes replace the key.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
 			"expire_in_hours":    resourceschema.Int64Attribute{Optional: true, MarkdownDescription: "Optional number of hours until the admin API key expires. Omit all expiration fields for a non-expiring key. Mutually exclusive with expires_in_seconds and expire_in_days. Changes replace the key.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
 			"expire_in_days":     resourceschema.Int64Attribute{Optional: true, MarkdownDescription: "Optional number of days until the admin API key expires. Omit all expiration fields for a non-expiring key. Mutually exclusive with expires_in_seconds and expire_in_hours. Changes replace the key.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
-			"scopes":             resourceschema.SetAttribute{Optional: true, ElementType: types.StringType, MarkdownDescription: "Optional admin API key scopes. Scopes are create-only and changing them replaces the key.", PlanModifiers: []planmodifier.Set{setplanmodifier.RequiresReplace()}},
 			"value":              resourceschema.StringAttribute{Computed: true, Sensitive: true, MarkdownDescription: "Unredacted admin API key value returned only during create. Protect Terraform state accordingly."},
 			"redacted_value":     resourceschema.StringAttribute{Computed: true, MarkdownDescription: "Redacted admin API key value returned by read operations."},
 			"owner_type":         resourceschema.StringAttribute{Computed: true, MarkdownDescription: "Owner type returned by OpenAI."},
@@ -108,12 +105,7 @@ func (r *adminAPIKeyResource) Create(ctx context.Context, req resource.CreateReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	scopes, diags := setToStringSlice(ctx, plan.Scopes)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	apiKey, err := r.client.CreateAdminAPIKey(ctx, client.AdminAPIKeyCreateRequest{Name: plan.Name.ValueString(), ExpiresInSeconds: expiresInSeconds, Scopes: scopes})
+	apiKey, err := r.client.CreateAdminAPIKey(ctx, client.AdminAPIKeyCreateRequest{Name: plan.Name.ValueString(), ExpiresInSeconds: expiresInSeconds})
 	if err != nil {
 		addClientError(&resp.Diagnostics, "Unable to create OpenAI admin API key", err)
 		return
@@ -142,7 +134,7 @@ func (r *adminAPIKeyResource) Read(ctx context.Context, req resource.ReadRequest
 }
 
 func (r *adminAPIKeyResource) Update(ctx context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("OpenAI admin API keys are immutable", "OpenAI does not expose an update operation for organization admin API keys. Change name, scopes, or expiration settings by replacing the resource.")
+	resp.Diagnostics.AddError("OpenAI admin API keys are immutable", "OpenAI does not expose an update operation for organization admin API keys. Change name or expiration settings by replacing the resource.")
 }
 
 func (r *adminAPIKeyResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -175,7 +167,6 @@ func adminAPIKeyResourceModelFromAPI(apiKey *client.AdminAPIKey, prior adminAPIK
 		ExpiresInSeconds: prior.ExpiresInSeconds,
 		ExpireInHours:    prior.ExpireInHours,
 		ExpireInDays:     prior.ExpireInDays,
-		Scopes:           prior.Scopes,
 		Value:            value,
 		RedactedValue:    stringOrNull(apiKey.RedactedValue),
 		OwnerType:        stringOrNull(apiKey.OwnerType),

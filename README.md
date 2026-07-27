@@ -295,16 +295,14 @@ administration automation.
 
 | Terraform surface | Kind | Purpose | Import ID / Lookup |
 | --- | --- | --- | --- |
-| `openai_admin_api_key` | Resource | Issue organization admin API keys with optional expiration and scopes. Destroy revokes the key. | `admin_key_123` |
+| `openai_admin_api_key` | Resource | Issue organization admin API keys with optional expiration. Destroy revokes the key. | `admin_key_123` |
 | `openai_admin_api_keys` / `openai_admin_api_key` | Data sources | List or read admin key metadata. Values are redacted. | `id` |
 
 `openai_admin_api_key.value` is Sensitive and returned only during create. It is
 still stored in Terraform state; use a remote encrypted backend with restricted
 access. Configure at most one of `expires_in_seconds`, `expire_in_hours`, or
 `expire_in_days`; hours and days are converted to OpenAI's seconds-based create
-parameter. Optional `scopes` are create-only strings sent as the create request
-`scopes` array; changing scopes replaces the key. Imported keys should leave
-`scopes` unset unless replacement is intended.
+parameter.
 
 Destroy and replacement require OpenAI to confirm `deleted=true` for the
 requested admin key ID. If OpenAI does not confirm deletion, Terraform keeps the
@@ -385,16 +383,12 @@ output "project_api_key" {
 }
 ```
 
-### Admin API Keys: create scoped automation credentials
+### Admin API Keys: create automation credentials
 
 ```hcl
-resource "openai_admin_api_key" "readonly_admin" {
-  name           = "readonly-admin-automation"
+resource "openai_admin_api_key" "automation" {
+  name           = "terraform-admin-automation"
   expire_in_days = 30
-  scopes = [
-    "organization.users.read",
-    "organization.projects.read",
-  ]
 
   lifecycle {
     prevent_destroy = true

@@ -7,28 +7,24 @@ admin API keys used by automation that calls OpenAI Administration APIs.
 
 | Surface | Kind | Purpose | Detailed docs |
 | --- | --- | --- | --- |
-| `openai_admin_api_key` | Resource | Issue organization admin API keys with optional expiration and scopes. | `docs/resources/openai_admin_api_key.md` |
+| `openai_admin_api_key` | Resource | Issue organization admin API keys with optional expiration. | `docs/resources/openai_admin_api_key.md` |
 | `openai_admin_api_keys` | Data source | List admin API key metadata. Values are redacted. | `docs/data-sources/openai_admin_api_keys.md` |
 | `openai_admin_api_key` | Data source | Read one admin API key metadata record by ID. | `docs/data-sources/openai_admin_api_key.md` |
 
 ## Common workflow
 
 ```hcl
-resource "openai_admin_api_key" "readonly_admin" {
-  name           = "readonly-admin-automation"
+resource "openai_admin_api_key" "automation" {
+  name           = "terraform-admin-automation"
   expire_in_days = 30
-  scopes = [
-    "organization.users.read",
-    "organization.projects.read",
-  ]
 
   lifecycle {
     prevent_destroy = true
   }
 }
 
-output "readonly_admin_key" {
-  value     = openai_admin_api_key.readonly_admin.value
+output "admin_key" {
+  value     = openai_admin_api_key.automation.value
   sensitive = true
 }
 ```
@@ -44,16 +40,6 @@ Configure at most one expiration input:
 | `expire_in_days` | Days | Converted to seconds during create. |
 
 Omit all expiration inputs for a non-expiring key.
-
-## Scopes
-
-`scopes` is an optional set of strings sent as the create request `scopes` array.
-The provider treats scopes as create-only metadata because admin keys are
-immutable in this provider. Changing scopes replaces the key.
-
-Imported admin keys have unknown external scope configuration to Terraform. Leave
-`scopes` unset for imported keys unless you intend to replace them with a managed
-scope set.
 
 ## Import and destroy behavior
 

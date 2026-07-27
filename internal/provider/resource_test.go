@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"reflect"
 	"testing"
 
 	"github.com/openai/openai-go/v3"
@@ -1160,11 +1159,7 @@ func TestAdminAPIKeyResourceWithMockClient(t *testing.T) {
 	r := &adminAPIKeyResource{client: fake}
 	schema := resourceSchema(ctx, t, r)
 	plan := tfsdk.Plan{Schema: schema}
-	scopes, diags := setStringValueOrNull(ctx, []string{"organization.users.read", "organization.projects.read"})
-	if diags.HasError() {
-		t.Fatalf("scopes: %v", diags)
-	}
-	if diags := plan.Set(ctx, &adminAPIKeyResourceModel{Name: types.StringValue("admin-key"), ExpiresInSeconds: types.Int64Value(3600), Scopes: scopes}); diags.HasError() {
+	if diags := plan.Set(ctx, &adminAPIKeyResourceModel{Name: types.StringValue("admin-key"), ExpiresInSeconds: types.Int64Value(3600)}); diags.HasError() {
 		t.Fatalf("plan set: %v", diags)
 	}
 	createResp := resource.CreateResponse{State: tfsdk.State{Schema: schema}}
@@ -1179,16 +1174,9 @@ func TestAdminAPIKeyResourceWithMockClient(t *testing.T) {
 	if state.ID.ValueString() != "admin_key_1" || state.Value.ValueString() != "sk-admin-created" || state.RedactedValue.ValueString() != "sk-admin..." {
 		t.Fatalf("unexpected admin key state: %#v", state)
 	}
-	wantReq := client.AdminAPIKeyCreateRequest{Name: "admin-key", ExpiresInSeconds: 3600, Scopes: []string{"organization.projects.read", "organization.users.read"}}
-	if !reflect.DeepEqual(fake.createdAdminAPIKeyReq, wantReq) {
+	wantReq := client.AdminAPIKeyCreateRequest{Name: "admin-key", ExpiresInSeconds: 3600}
+	if fake.createdAdminAPIKeyReq != wantReq {
 		t.Fatalf("unexpected admin key create request: %#v", fake.createdAdminAPIKeyReq)
-	}
-	var stateScopes []string
-	if diags := state.Scopes.ElementsAs(ctx, &stateScopes, false); diags.HasError() {
-		t.Fatalf("state scopes: %v", diags)
-	}
-	if !reflect.DeepEqual(stateScopes, wantReq.Scopes) {
-		t.Fatalf("admin key scopes state = %#v, want %#v", stateScopes, wantReq.Scopes)
 	}
 	readResp := resource.ReadResponse{State: createResp.State}
 	r.Read(ctx, resource.ReadRequest{State: createResp.State}, &readResp)
@@ -1216,7 +1204,6 @@ func TestAdminAPIKeyResourceExpirationUnits(t *testing.T) {
 		ExpiresInSeconds: types.Int64Null(),
 		ExpireInHours:    types.Int64Value(2),
 		ExpireInDays:     types.Int64Null(),
-		Scopes:           types.SetNull(types.StringType),
 	}); diags.HasError() {
 		t.Fatalf("plan set: %v", diags)
 	}
@@ -1262,7 +1249,6 @@ func TestAdminAPIKeyReplacementDestroyDeletesPriorKey(t *testing.T) {
 		ExpiresInSeconds: types.Int64Null(),
 		ExpireInHours:    types.Int64Null(),
 		ExpireInDays:     types.Int64Value(1),
-		Scopes:           types.SetNull(types.StringType),
 		Value:            types.StringValue("sk-admin-old"),
 		RedactedValue:    types.StringValue("sk-admin...old"),
 	}); diags.HasError() {

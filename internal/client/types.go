@@ -95,7 +95,6 @@ type AdminAPIKey struct {
 type AdminAPIKeyCreateRequest struct {
 	Name             string
 	ExpiresInSeconds int64
-	Scopes           []string
 }
 
 type AdminAPIKeyListRequest struct {
