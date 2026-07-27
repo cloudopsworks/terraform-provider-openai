@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -334,6 +335,40 @@ func TestOpenAIAdminClientAdminAPIKeyLifecycle(t *testing.T) {
 	}
 	if err := cl.DeleteAdminAPIKey(context.Background(), "admin_key_1"); err != nil {
 		t.Fatalf("DeleteAdminAPIKey() = %v", err)
+	}
+}
+
+func TestOpenAIAdminClientAdminAPIKeyDeleteRequiresRevocationConfirmation(t *testing.T) {
+	cl := testClient(func(r *http.Request) (*http.Response, error) {
+		switch r.Method + " " + r.URL.Path {
+		case "DELETE /organization/admin_api_keys/admin_key_1":
+			return jsonResponse(map[string]any{"id": "admin_key_1", "deleted": false}), nil
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		return nil, nil
+	})
+
+	err := cl.DeleteAdminAPIKey(context.Background(), "admin_key_1")
+	if err == nil || !strings.Contains(err.Error(), "deleted=false") {
+		t.Fatalf("DeleteAdminAPIKey() error = %v, want deleted=false confirmation error", err)
+	}
+}
+
+func TestOpenAIAdminClientAdminAPIKeyDeleteRejectsIDMismatch(t *testing.T) {
+	cl := testClient(func(r *http.Request) (*http.Response, error) {
+		switch r.Method + " " + r.URL.Path {
+		case "DELETE /organization/admin_api_keys/admin_key_1":
+			return jsonResponse(map[string]any{"id": "admin_key_2", "deleted": true}), nil
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		return nil, nil
+	})
+
+	err := cl.DeleteAdminAPIKey(context.Background(), "admin_key_1")
+	if err == nil || !strings.Contains(err.Error(), "id mismatch") {
+		t.Fatalf("DeleteAdminAPIKey() error = %v, want id mismatch error", err)
 	}
 }
 

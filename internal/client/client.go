@@ -336,8 +336,20 @@ func (c *OpenAIAdminClient) ListAdminAPIKeys(ctx context.Context, req AdminAPIKe
 }
 
 func (c *OpenAIAdminClient) DeleteAdminAPIKey(ctx context.Context, id string) error {
-	_, err := c.client.Admin.Organization.AdminAPIKeys.Delete(ctx, id)
-	return err
+	deleted, err := c.client.Admin.Organization.AdminAPIKeys.Delete(ctx, id)
+	if err != nil {
+		return err
+	}
+	if deleted == nil {
+		return fmt.Errorf("openai admin api key delete response for %q was empty", id)
+	}
+	if !deleted.Deleted {
+		return fmt.Errorf("openai admin api key %q was not revoked: delete response returned deleted=false", id)
+	}
+	if deleted.ID != "" && deleted.ID != id {
+		return fmt.Errorf("openai admin api key delete response id mismatch: requested %q, got %q", id, deleted.ID)
+	}
+	return nil
 }
 
 func (c *OpenAIAdminClient) GetOrganizationUser(ctx context.Context, userID string) (*OrganizationUser, error) {

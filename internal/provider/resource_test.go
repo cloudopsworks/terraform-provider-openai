@@ -44,6 +44,8 @@ type fakeAdminClient struct {
 	archiveProjectErr       error
 	deletedAccount          string
 	deletedKey              string
+	createdAdminAPIKeyReq   client.AdminAPIKeyCreateRequest
+	deletedAdminAPIKey      string
 	err                     error
 }
 
@@ -191,6 +193,7 @@ func (f *fakeAdminClient) CreateAdminAPIKey(ctx context.Context, req client.Admi
 	if f.err != nil {
 		return nil, f.err
 	}
+	f.createdAdminAPIKeyReq = req
 	return &client.AdminAPIKey{ID: "admin_key_1", Name: req.Name, Value: "sk-admin-created", RedactedValue: "sk-admin...", OwnerType: "user", OwnerID: "user_1", OwnerName: "Owner", OwnerRole: "owner", CreatedAt: 21}, nil
 }
 func (f *fakeAdminClient) GetAdminAPIKey(ctx context.Context, id string) (*client.AdminAPIKey, error) {
@@ -206,6 +209,7 @@ func (f *fakeAdminClient) ListAdminAPIKeys(ctx context.Context, req client.Admin
 	return &client.AdminAPIKeyListResponse{Items: []client.AdminAPIKey{{ID: "admin_key_1", Name: "admin-key", RedactedValue: "sk-admin...", OwnerType: "user", OwnerID: "user_1", OwnerName: "Owner", OwnerRole: "owner", CreatedAt: 21}}, LastID: "admin_key_1"}, nil
 }
 func (f *fakeAdminClient) DeleteAdminAPIKey(ctx context.Context, id string) error {
+	f.deletedAdminAPIKey = id
 	return f.err
 }
 func (f *fakeAdminClient) GetOrganizationUser(ctx context.Context, userID string) (*client.OrganizationUser, error) {
@@ -1151,7 +1155,8 @@ func dataSourceSchema(ctx context.Context, t *testing.T, ds datasource.DataSourc
 
 func TestAdminAPIKeyResourceWithMockClient(t *testing.T) {
 	ctx := context.Background()
-	r := &adminAPIKeyResource{client: &fakeAdminClient{}}
+	fake := &fakeAdminClient{}
+	r := &adminAPIKeyResource{client: fake}
 	schema := resourceSchema(ctx, t, r)
 	plan := tfsdk.Plan{Schema: schema}
 	if diags := plan.Set(ctx, &adminAPIKeyResourceModel{Name: types.StringValue("admin-key"), ExpiresInSeconds: types.Int64Value(3600)}); diags.HasError() {
@@ -1169,6 +1174,9 @@ func TestAdminAPIKeyResourceWithMockClient(t *testing.T) {
 	if state.ID.ValueString() != "admin_key_1" || state.Value.ValueString() != "sk-admin-created" || state.RedactedValue.ValueString() != "sk-admin..." {
 		t.Fatalf("unexpected admin key state: %#v", state)
 	}
+	if fake.createdAdminAPIKeyReq != (client.AdminAPIKeyCreateRequest{Name: "admin-key", ExpiresInSeconds: 3600}) {
+		t.Fatalf("unexpected admin key create request: %#v", fake.createdAdminAPIKeyReq)
+	}
 	readResp := resource.ReadResponse{State: createResp.State}
 	r.Read(ctx, resource.ReadRequest{State: createResp.State}, &readResp)
 	if readResp.Diagnostics.HasError() {
@@ -1178,6 +1186,80 @@ func TestAdminAPIKeyResourceWithMockClient(t *testing.T) {
 	r.Delete(ctx, resource.DeleteRequest{State: readResp.State}, &deleteResp)
 	if deleteResp.Diagnostics.HasError() {
 		t.Fatalf("delete diagnostics: %v", deleteResp.Diagnostics)
+	}
+	if fake.deletedAdminAPIKey != "admin_key_1" {
+		t.Fatalf("admin key delete id = %q", fake.deletedAdminAPIKey)
+	}
+}
+
+func TestAdminAPIKeyResourceExpirationUnits(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeAdminClient{}
+	r := &adminAPIKeyResource{client: fake}
+	schema := resourceSchema(ctx, t, r)
+	plan := tfsdk.Plan{Schema: schema}
+	if diags := plan.Set(ctx, &adminAPIKeyResourceModel{
+		Name:             types.StringValue("admin-key"),
+		ExpiresInSeconds: types.Int64Null(),
+		ExpireInHours:    types.Int64Value(2),
+		ExpireInDays:     types.Int64Null(),
+	}); diags.HasError() {
+		t.Fatalf("plan set: %v", diags)
+	}
+	createResp := resource.CreateResponse{State: tfsdk.State{Schema: schema}}
+	r.Create(ctx, resource.CreateRequest{Plan: plan}, &createResp)
+	if createResp.Diagnostics.HasError() {
+		t.Fatalf("create diagnostics: %v", createResp.Diagnostics)
+	}
+	if fake.createdAdminAPIKeyReq.ExpiresInSeconds != 7200 {
+		t.Fatalf("expires in seconds = %d, want 7200", fake.createdAdminAPIKeyReq.ExpiresInSeconds)
+	}
+	var state adminAPIKeyResourceModel
+	if diags := createResp.State.Get(ctx, &state); diags.HasError() {
+		t.Fatalf("state get: %v", diags)
+	}
+	if state.ExpireInHours.ValueInt64() != 2 || !state.ExpiresInSeconds.IsNull() || !state.ExpireInDays.IsNull() {
+		t.Fatalf("expiration unit state was not preserved: %#v", state)
+	}
+}
+
+func TestAdminAPIKeyResourceExpirationValidation(t *testing.T) {
+	if _, diags := adminAPIKeyExpirationSeconds(adminAPIKeyResourceModel{ExpiresInSeconds: types.Int64Value(60), ExpireInHours: types.Int64Value(1)}); !diags.HasError() {
+		t.Fatal("expected conflicting expiration diagnostics")
+	}
+	if _, diags := adminAPIKeyExpirationSeconds(adminAPIKeyResourceModel{ExpireInDays: types.Int64Value(0)}); !diags.HasError() {
+		t.Fatal("expected non-positive expiration diagnostics")
+	}
+	seconds, diags := adminAPIKeyExpirationSeconds(adminAPIKeyResourceModel{ExpireInDays: types.Int64Value(3)})
+	if diags.HasError() || seconds != 259200 {
+		t.Fatalf("expire_in_days conversion = %d, diagnostics: %v", seconds, diags)
+	}
+}
+
+func TestAdminAPIKeyReplacementDestroyDeletesPriorKey(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeAdminClient{}
+	r := &adminAPIKeyResource{client: fake}
+	schema := resourceSchema(ctx, t, r)
+	oldState := tfsdk.State{Schema: schema}
+	if diags := oldState.Set(ctx, &adminAPIKeyResourceModel{
+		ID:               types.StringValue("admin_key_old"),
+		Name:             types.StringValue("admin-key"),
+		ExpiresInSeconds: types.Int64Null(),
+		ExpireInHours:    types.Int64Null(),
+		ExpireInDays:     types.Int64Value(1),
+		Value:            types.StringValue("sk-admin-old"),
+		RedactedValue:    types.StringValue("sk-admin...old"),
+	}); diags.HasError() {
+		t.Fatalf("state set: %v", diags)
+	}
+	deleteResp := resource.DeleteResponse{State: oldState}
+	r.Delete(ctx, resource.DeleteRequest{State: oldState}, &deleteResp)
+	if deleteResp.Diagnostics.HasError() {
+		t.Fatalf("delete diagnostics: %v", deleteResp.Diagnostics)
+	}
+	if fake.deletedAdminAPIKey != "admin_key_old" {
+		t.Fatalf("replacement delete revoked %q, want old state id", fake.deletedAdminAPIKey)
 	}
 }
 

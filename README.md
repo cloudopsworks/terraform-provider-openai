@@ -284,6 +284,9 @@ provider fails fast if multiple secret sources are configured or discovered.
 are returned only during create. They are still stored in Terraform state; use a
 remote encrypted backend with restricted access. Use `lifecycle { prevent_destroy
 = true }` for critical admin keys and roles that could lock out automation.
+For admin API key expiration, configure at most one of `expires_in_seconds`,
+`expire_in_hours`, or `expire_in_days`; hours and days are converted to OpenAI's
+seconds-based create parameter.
 
 ## Supported data sources
 
@@ -391,6 +394,7 @@ as part of an approved rotation change.
 - Import existing projects, service accounts, roles, groups, and keys before letting Terraform manage them.
 - Keep organization users managed outside this provider, then reference them with `openai_organization_user` or `openai_organization_users` data sources.
 - Review destructive plans carefully: project destroy archives projects, while key, group, membership, role, and role-assignment destroys call the corresponding OpenAI delete/remove API.
+- Admin API key destroy/replacement requires OpenAI to confirm `deleted=true` for the requested key ID; otherwise Terraform keeps the resource in state and reports a revoke failure.
 
 Provider alias example:
 
