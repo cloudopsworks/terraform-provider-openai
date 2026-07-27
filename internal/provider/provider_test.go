@@ -732,7 +732,21 @@ func emptyProjectState(ctx context.Context, t *testing.T, schema resourceschema.
 func emptyServiceAccountState(ctx context.Context, t *testing.T, schema resourceschema.Schema) tfsdk.State {
 	t.Helper()
 	plan := tfsdk.Plan{Schema: schema}
-	if diags := plan.Set(ctx, &serviceAccountResourceModel{ID: types.StringNull(), ProjectID: types.StringNull(), Name: types.StringNull(), Role: types.StringNull(), CreatedAt: types.Int64Null()}); diags.HasError() {
+	if diags := plan.Set(ctx, &serviceAccountResourceModel{
+		ID:                  types.StringNull(),
+		ProjectID:           types.StringNull(),
+		Name:                types.StringNull(),
+		Role:                types.StringNull(),
+		CreatedAt:           types.Int64Null(),
+		Scopes:              types.SetNull(types.StringType),
+		APIKeyID:            types.StringNull(),
+		APIKeyName:          types.StringNull(),
+		APIKeyValue:         types.StringNull(),
+		APIKeyRedactedValue: types.StringNull(),
+		APIKeyCreatedAt:     types.Int64Null(),
+		APIKeyLastUsedAt:    types.Int64Null(),
+		APIKeyOwnerAccess:   types.StringNull(),
+	}); diags.HasError() {
 		t.Fatalf("empty account plan: %v", diags)
 	}
 	return tfsdk.State{Schema: schema, Raw: plan.Raw}

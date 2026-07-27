@@ -30,6 +30,9 @@ type fakeAdminClient struct {
 	listServiceAccountReqs  []serviceAccountListCall
 	apiKey                  *client.APIKey
 	createdKey              *client.ServiceAccountAPIKeyCreateResponse
+	createdKeyProjectID     string
+	createdKeyAccountID     string
+	createdKeyReq           client.ServiceAccountAPIKeyCreateRequest
 	createdProjectReq       client.ProjectCreateRequest
 	updatedProjectID        string
 	updatedProjectReq       client.ProjectUpdateRequest
@@ -123,6 +126,9 @@ func (f *fakeAdminClient) CreateServiceAccount(ctx context.Context, projectID st
 	f.createdAccountProjectID = projectID
 	f.createdAccountReq = req
 	f.account = &client.ServiceAccount{ID: "sa_1", Name: req.Name, Role: req.Role, CreatedAt: 11}
+	if !req.CreateServiceAccountOnly {
+		f.account.APIKey = &client.ServiceAccountAPIKeyCreateResponse{ID: "key_default", Name: "Secret Key", Value: "sk-default", CreatedAt: 12}
+	}
 	return f.account, nil
 }
 func (f *fakeAdminClient) GetServiceAccount(ctx context.Context, projectID, serviceAccountID string) (*client.ServiceAccount, error) {
@@ -172,6 +178,9 @@ func (f *fakeAdminClient) CreateServiceAccountAPIKey(ctx context.Context, projec
 	if f.err != nil {
 		return nil, f.err
 	}
+	f.createdKeyProjectID = projectID
+	f.createdKeyAccountID = serviceAccountID
+	f.createdKeyReq = req
 	f.createdKey = &client.ServiceAccountAPIKeyCreateResponse{ID: "key_1", Name: req.Name, Value: "sk-created", CreatedAt: 12}
 	return f.createdKey, nil
 }
@@ -701,7 +710,7 @@ func TestServiceAccountResourceLifecycleWithMockClient(t *testing.T) {
 	r := &serviceAccountResource{client: fake}
 	schema := resourceSchema(ctx, t, r)
 	plan := tfsdk.Plan{Schema: schema}
-	if diags := plan.Set(ctx, &serviceAccountResourceModel{ProjectID: types.StringValue("proj_1"), Name: types.StringValue("svc"), Role: types.StringValue("member")}); diags.HasError() {
+	if diags := plan.Set(ctx, &serviceAccountResourceModel{ProjectID: types.StringValue("proj_1"), Name: types.StringValue("svc"), Role: types.StringValue("member"), Scopes: types.SetNull(types.StringType)}); diags.HasError() {
 		t.Fatalf("plan set: %v", diags)
 	}
 	createResp := resource.CreateResponse{State: tfsdk.State{Schema: schema}}
@@ -719,6 +728,9 @@ func TestServiceAccountResourceLifecycleWithMockClient(t *testing.T) {
 	if state.ProjectID.ValueString() != "proj_1" || state.Name.ValueString() != "svc" || state.CreatedAt.ValueInt64() != 11 {
 		t.Fatalf("service account state mapping failed: %#v", state)
 	}
+	if state.APIKeyID.ValueString() != "key_default" || state.APIKeyValue.ValueString() != "sk-default" || state.APIKeyName.ValueString() != "Secret Key" {
+		t.Fatalf("default service account API key was not captured: %#v", state)
+	}
 	if fake.createdAccountProjectID != "proj_1" || fake.createdAccountReq != (client.ServiceAccountCreateRequest{Name: "svc", Role: "member"}) {
 		t.Fatalf("unexpected create project=%q request=%#v", fake.createdAccountProjectID, fake.createdAccountReq)
 	}
@@ -730,7 +742,7 @@ func TestServiceAccountResourceLifecycleWithMockClient(t *testing.T) {
 		t.Fatalf("plan2 set: %v", diags)
 	}
 	updateResp := resource.UpdateResponse{State: tfsdk.State{Schema: schema}}
-	r.Update(ctx, resource.UpdateRequest{Plan: plan2}, &updateResp)
+	r.Update(ctx, resource.UpdateRequest{Plan: plan2, State: createResp.State}, &updateResp)
 	if updateResp.Diagnostics.HasError() {
 		t.Fatalf("update diagnostics: %v", updateResp.Diagnostics)
 	}
@@ -753,6 +765,9 @@ func TestServiceAccountResourceLifecycleWithMockClient(t *testing.T) {
 	if refreshed.ID.ValueString() != "sa_1" || refreshed.Name.ValueString() != "svc2" || refreshed.Role.ValueString() != "owner" || refreshed.ProjectID.ValueString() != "proj_1" || refreshed.CreatedAt.ValueInt64() != 11 {
 		t.Fatalf("service account read state mapping failed: %#v", refreshed)
 	}
+	if refreshed.APIKeyID.ValueString() != "key_default" || refreshed.APIKeyValue.ValueString() != "sk-default" {
+		t.Fatalf("service account read did not preserve default API key state: %#v", refreshed)
+	}
 
 	importResp := resource.ImportStateResponse{State: emptyServiceAccountState(ctx, t, schema)}
 	r.ImportState(ctx, resource.ImportStateRequest{ID: "proj_1/sa_1"}, &importResp)
@@ -772,10 +787,77 @@ func TestServiceAccountResourceLifecycleWithMockClient(t *testing.T) {
 		t.Fatalf("service account import/read state mapping failed: %#v", imported)
 	}
 
-	deleteResp := resource.DeleteResponse{State: importReadResp.State}
-	r.Delete(ctx, resource.DeleteRequest{State: importReadResp.State}, &deleteResp)
-	if deleteResp.Diagnostics.HasError() || fake.deletedAccount != "sa_1" {
-		t.Fatalf("delete diagnostics=%v deleted=%q", deleteResp.Diagnostics, fake.deletedAccount)
+	deleteResp := resource.DeleteResponse{State: readResp.State}
+	r.Delete(ctx, resource.DeleteRequest{State: readResp.State}, &deleteResp)
+	if deleteResp.Diagnostics.HasError() || fake.deletedKey != "key_default" || fake.deletedAccount != "sa_1" {
+		t.Fatalf("delete diagnostics=%v deletedKey=%q deletedAccount=%q", deleteResp.Diagnostics, fake.deletedKey, fake.deletedAccount)
+	}
+}
+
+func TestServiceAccountResourceCreatesScopedAPIKeyWithMockClient(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeAdminClient{}
+	r := &serviceAccountResource{client: fake}
+	schema := resourceSchema(ctx, t, r)
+	scopes, diags := setStringValueOrNull(ctx, []string{"responses.read", "models.read"})
+	if diags.HasError() {
+		t.Fatalf("scopes: %v", diags)
+	}
+	plan := tfsdk.Plan{Schema: schema}
+	if diags := plan.Set(ctx, &serviceAccountResourceModel{
+		ProjectID: types.StringValue("proj_1"),
+		Name:      types.StringValue("svc"),
+		Role:      types.StringValue("member"),
+		Scopes:    scopes,
+	}); diags.HasError() {
+		t.Fatalf("plan set: %v", diags)
+	}
+
+	createResp := resource.CreateResponse{State: tfsdk.State{Schema: schema}}
+	r.Create(ctx, resource.CreateRequest{Plan: plan}, &createResp)
+	if createResp.Diagnostics.HasError() {
+		t.Fatalf("create diagnostics: %v", createResp.Diagnostics)
+	}
+	if fake.createdAccountReq != (client.ServiceAccountCreateRequest{Name: "svc", Role: "member", CreateServiceAccountOnly: true}) {
+		t.Fatalf("unexpected scoped service account create request: %#v", fake.createdAccountReq)
+	}
+	if fake.createdKeyProjectID != "proj_1" || fake.createdKeyAccountID != "sa_1" {
+		t.Fatalf("unexpected scoped key target project=%q account=%q", fake.createdKeyProjectID, fake.createdKeyAccountID)
+	}
+	wantScopes := []string{"models.read", "responses.read"}
+	if fake.createdKeyReq.Name != "svc" || len(fake.createdKeyReq.Scopes) != len(wantScopes) {
+		t.Fatalf("unexpected scoped key request: %#v", fake.createdKeyReq)
+	}
+	for i := range wantScopes {
+		if fake.createdKeyReq.Scopes[i] != wantScopes[i] {
+			t.Fatalf("scoped key scopes = %#v, want %#v", fake.createdKeyReq.Scopes, wantScopes)
+		}
+	}
+
+	var state serviceAccountResourceModel
+	if diags := createResp.State.Get(ctx, &state); diags.HasError() {
+		t.Fatalf("state get: %v", diags)
+	}
+	if state.APIKeyID.ValueString() != "key_1" || state.APIKeyValue.ValueString() != "sk-created" || state.APIKeyName.ValueString() != "svc" || state.APIKeyCreatedAt.ValueInt64() != 12 {
+		t.Fatalf("scoped API key state was not captured: %#v", state)
+	}
+	var stateScopes []string
+	if diags := state.Scopes.ElementsAs(ctx, &stateScopes, false); diags.HasError() {
+		t.Fatalf("state scopes: %v", diags)
+	}
+	for i := range wantScopes {
+		if stateScopes[i] != wantScopes[i] {
+			t.Fatalf("state scopes = %#v, want %#v", stateScopes, wantScopes)
+		}
+	}
+
+	deleteResp := resource.DeleteResponse{State: createResp.State}
+	r.Delete(ctx, resource.DeleteRequest{State: createResp.State}, &deleteResp)
+	if deleteResp.Diagnostics.HasError() {
+		t.Fatalf("delete diagnostics: %v", deleteResp.Diagnostics)
+	}
+	if fake.deletedKey != "key_1" || fake.deletedAccount != "sa_1" {
+		t.Fatalf("delete did not clean up scoped key and account: key=%q account=%q", fake.deletedKey, fake.deletedAccount)
 	}
 }
 
@@ -789,6 +871,7 @@ func TestServiceAccountResourceReadDriftAndNotFoundWithMockClient(t *testing.T) 
 		Name:      types.StringValue("svc"),
 		Role:      types.StringValue("member"),
 		CreatedAt: types.Int64Value(11),
+		Scopes:    types.SetNull(types.StringType),
 	}); diags.HasError() {
 		t.Fatalf("state set: %v", diags)
 	}
@@ -841,6 +924,7 @@ func TestServiceAccountResourceDeleteWithMockClient(t *testing.T) {
 		Name:      types.StringValue("svc"),
 		Role:      types.StringValue("member"),
 		CreatedAt: types.Int64Value(11),
+		Scopes:    types.SetNull(types.StringType),
 	}); diags.HasError() {
 		t.Fatalf("state set: %v", diags)
 	}
@@ -987,6 +1071,14 @@ func TestServiceAccountResourceSchemaContract(t *testing.T) {
 		}
 		return attr
 	}
+	setAttr := func(name string) resourceschema.SetAttribute {
+		t.Helper()
+		attr, ok := schema.Attributes[name].(resourceschema.SetAttribute)
+		if !ok {
+			t.Fatalf("%s was not a set attribute: %T", name, schema.Attributes[name])
+		}
+		return attr
+	}
 
 	if attr := stringAttr("id"); !attr.Computed || attr.Required || attr.Optional {
 		t.Fatalf("id schema flags mismatch: %#v", attr)
@@ -1008,6 +1100,22 @@ func TestServiceAccountResourceSchemaContract(t *testing.T) {
 	}
 	if attr := int64Attr("created_at"); !attr.Computed || attr.Required || attr.Optional {
 		t.Fatalf("created_at schema flags mismatch: %#v", attr)
+	}
+	if attr := setAttr("scopes"); !attr.Optional || attr.Required || attr.Computed || len(attr.PlanModifiers) != 1 || attr.ElementType != types.StringType {
+		t.Fatalf("scopes schema flags mismatch: %#v", attr)
+	}
+	for _, name := range []string{"api_key_id", "api_key_name", "api_key_redacted_value", "api_key_owner_project_access"} {
+		if attr := stringAttr(name); !attr.Computed || attr.Required || attr.Optional {
+			t.Fatalf("%s schema flags mismatch: %#v", name, attr)
+		}
+	}
+	if attr := stringAttr("api_key_value"); !attr.Computed || attr.Required || attr.Optional || !attr.Sensitive {
+		t.Fatalf("api_key_value schema flags mismatch: %#v", attr)
+	}
+	for _, name := range []string{"api_key_created_at", "api_key_last_used_at"} {
+		if attr := int64Attr(name); !attr.Computed || attr.Required || attr.Optional {
+			t.Fatalf("%s schema flags mismatch: %#v", name, attr)
+		}
 	}
 }
 
@@ -1053,6 +1161,7 @@ func TestServiceAccountResourceUpgradeStatePreservesV0State(t *testing.T) {
 		Name:      types.StringValue("svc"),
 		Role:      types.StringValue("owner"),
 		CreatedAt: types.Int64Value(11),
+		Scopes:    types.SetNull(types.StringType),
 	}); diags.HasError() {
 		t.Fatalf("prior set: %v", diags)
 	}

@@ -86,7 +86,7 @@ func (r *projectAPIKeyResource) Create(ctx context.Context, req resource.CreateR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	created, err := r.client.CreateServiceAccountAPIKey(ctx, plan.ProjectID.ValueString(), plan.ServiceAccountID.ValueString(), client.ServiceAccountAPIKeyCreateRequest{Name: plan.Name.ValueString(), Scopes: scopes})
+	created, err := createProjectAPIKey(ctx, r.client, plan.ProjectID.ValueString(), plan.ServiceAccountID.ValueString(), plan.Name.ValueString(), scopes)
 	if err != nil {
 		addClientError(&resp.Diagnostics, "Unable to create OpenAI project API key", err)
 		return
@@ -148,17 +148,19 @@ func projectAPIKeyModelFromCreate(ctx context.Context, created *client.ServiceAc
 	if scopes.IsUnknown() {
 		scopes, _ = setStringValueOrNull(ctx, nil)
 	}
+	apiKey := serviceAccountAPIKeyCreateStateFromAPI(created)
 	return projectAPIKeyResourceModel{
-		ID:               types.StringValue(created.ID),
-		ProjectID:        plan.ProjectID,
-		ServiceAccountID: plan.ServiceAccountID,
-		Name:             types.StringValue(created.Name),
-		Scopes:           scopes,
-		Value:            types.StringValue(created.Value),
-		RedactedValue:    types.StringNull(),
-		OwnerType:        types.StringValue("service_account"),
-		CreatedAt:        int64OrNull(created.CreatedAt),
-		LastUsedAt:       types.Int64Null(),
+		ID:                 apiKey.ID,
+		ProjectID:          plan.ProjectID,
+		ServiceAccountID:   plan.ServiceAccountID,
+		Name:               apiKey.Name,
+		Scopes:             scopes,
+		Value:              apiKey.Value,
+		RedactedValue:      types.StringNull(),
+		OwnerType:          types.StringValue("service_account"),
+		OwnerProjectAccess: types.StringNull(),
+		CreatedAt:          apiKey.CreatedAt,
+		LastUsedAt:         types.Int64Null(),
 	}
 }
 

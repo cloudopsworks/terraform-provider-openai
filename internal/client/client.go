@@ -156,8 +156,10 @@ func (c *OpenAIAdminClient) ArchiveProject(ctx context.Context, id string) (*Pro
 
 func (c *OpenAIAdminClient) CreateServiceAccount(ctx context.Context, projectID string, req ServiceAccountCreateRequest) (*ServiceAccount, error) {
 	params := openai.AdminOrganizationProjectServiceAccountNewParams{
-		Name:                     req.Name,
-		CreateServiceAccountOnly: openai.Bool(true),
+		Name: req.Name,
+	}
+	if req.CreateServiceAccountOnly {
+		params.CreateServiceAccountOnly = openai.Bool(true)
 	}
 	created, err := c.client.Admin.Organization.Projects.ServiceAccounts.New(ctx, projectID, params)
 	if err != nil {
@@ -167,8 +169,20 @@ func (c *OpenAIAdminClient) CreateServiceAccount(ctx context.Context, projectID 
 	if err := validateServiceAccount(account); err != nil {
 		return nil, err
 	}
+	if !req.CreateServiceAccountOnly {
+		apiKey := mapServiceAccountAPIKeyCreate(created.APIKey.ID, created.APIKey.Name, created.APIKey.Value, created.APIKey.CreatedAt)
+		if err := validateServiceAccountAPIKeyCreate(apiKey); err != nil {
+			return nil, err
+		}
+		account.APIKey = apiKey
+	}
 	if req.Role != "" && req.Role != account.Role {
-		return c.UpdateServiceAccount(ctx, projectID, account.ID, ServiceAccountUpdateRequest{Name: req.Name, Role: req.Role})
+		updated, err := c.UpdateServiceAccount(ctx, projectID, account.ID, ServiceAccountUpdateRequest{Name: req.Name, Role: req.Role})
+		if err != nil {
+			return nil, err
+		}
+		updated.APIKey = account.APIKey
+		return updated, nil
 	}
 	return account, nil
 }
@@ -248,7 +262,7 @@ func (c *OpenAIAdminClient) CreateServiceAccountAPIKey(ctx context.Context, proj
 	if err != nil {
 		return nil, err
 	}
-	mapped := &ServiceAccountAPIKeyCreateResponse{ID: created.ID, Name: created.Name, Value: created.Value, CreatedAt: created.CreatedAt}
+	mapped := mapServiceAccountAPIKeyCreate(created.ID, created.Name, created.Value, created.CreatedAt)
 	if err := validateServiceAccountAPIKeyCreate(mapped); err != nil {
 		return nil, err
 	}
@@ -829,6 +843,10 @@ func mapProject(project *openai.Project) (*Project, error) {
 
 func mapServiceAccount(id, name, role string, createdAt int64) *ServiceAccount {
 	return &ServiceAccount{ID: id, Name: name, Role: role, CreatedAt: createdAt}
+}
+
+func mapServiceAccountAPIKeyCreate(id, name, value string, createdAt int64) *ServiceAccountAPIKeyCreateResponse {
+	return &ServiceAccountAPIKeyCreateResponse{ID: id, Name: name, Value: value, CreatedAt: createdAt}
 }
 
 func validateServiceAccount(account *ServiceAccount) error {

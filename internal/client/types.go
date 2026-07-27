@@ -43,11 +43,13 @@ type ServiceAccount struct {
 	Name      string
 	Role      string
 	CreatedAt int64
+	APIKey    *ServiceAccountAPIKeyCreateResponse
 }
 
 type ServiceAccountCreateRequest struct {
-	Name string
-	Role string
+	Name                     string
+	Role                     string
+	CreateServiceAccountOnly bool
 }
 
 type ServiceAccountUpdateRequest struct {

@@ -67,6 +67,27 @@ func setToStringSlice(ctx context.Context, value types.Set) ([]string, diag.Diag
 	return values, diags
 }
 
+func setOrNull(value types.Set) types.Set {
+	if value.IsUnknown() {
+		return types.SetNull(types.StringType)
+	}
+	return value
+}
+
+func stringOrNullFromState(value types.String) types.String {
+	if value.IsUnknown() {
+		return types.StringNull()
+	}
+	return value
+}
+
+func int64OrNullFromState(value types.Int64) types.Int64 {
+	if value.IsUnknown() {
+		return types.Int64Null()
+	}
+	return value
+}
+
 func parseTwoPartImportID(id, first, second string) (string, string, error) {
 	parts := strings.Split(id, "/")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {

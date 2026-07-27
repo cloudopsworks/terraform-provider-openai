@@ -2,10 +2,11 @@
 
 API group: [Projects](../api-groups/projects.md).
 
-Manages an OpenAI project API key owned by a project service account. The
-unredacted `value` is returned only during create and is stored as Sensitive
-Terraform state. Refresh and read operations return only metadata and the
-redacted value.
+Creates a standalone OpenAI project API key owned by a project service account.
+This resource uses the same service-account API-key creation path that
+`openai_service_account` uses for scoped bootstrap keys. The unredacted `value` is
+returned only during create and is stored as Sensitive Terraform state. Refresh
+and read operations return only metadata and the redacted value.
 
 ## Example Usage
 
@@ -20,15 +21,15 @@ resource "openai_service_account" "app" {
   role       = "member"
 }
 
-resource "openai_project_api_key" "app" {
+resource "openai_project_api_key" "worker" {
   project_id         = openai_project.app.id
   service_account_id = openai_service_account.app.id
-  name               = "example-app"
+  name               = "example-worker"
   scopes             = ["responses.read"]
 }
 
-output "project_api_key" {
-  value     = openai_project_api_key.app.value
+output "worker_project_api_key" {
+  value     = openai_project_api_key.worker.value
   sensitive = true
 }
 ```
@@ -36,8 +37,11 @@ output "project_api_key" {
 ## Import
 
 ```sh
-terraform import openai_project_api_key.app proj_123/svc_acct_123/key_123
+terraform import openai_project_api_key.worker proj_123/svc_acct_123/key_123
 ```
+
+Imported API keys include metadata only. Existing unredacted key values cannot be
+recovered from OpenAI and will remain unset unless Terraform created the key.
 
 ## Schema
 
@@ -49,7 +53,7 @@ terraform import openai_project_api_key.app proj_123/svc_acct_123/key_123
 
 ### Optional
 
-- `scopes` (Set of String) Optional API key scopes. Scopes are create-only and changing them replaces the key.
+- `scopes` (Set of String) Optional API key scopes. Scopes are sent to OpenAI's service-account API-key create endpoint and are create-only. Changing scopes replaces the key.
 
 ### Read-Only
 
@@ -64,5 +68,6 @@ terraform import openai_project_api_key.app proj_123/svc_acct_123/key_123
 ## Notes
 
 - Treat Terraform state and plan artifacts as secret material whenever they contain this resource.
+- Use this resource for additional standalone service-account keys or independent key rotation.
 - OpenAI project API keys are immutable in this provider. Change `project_id`, `service_account_id`, `name`, or `scopes` by replacing the resource.
 - Destroy deletes the key through the OpenAI Admin API.

@@ -260,13 +260,19 @@ usage: |-
   Use this group to manage project containers, service accounts, project-scoped
   service-account API keys, and project custom roles.
 
+  OpenAI service-account creation returns a default unredacted API key. The
+  provider captures that key on `openai_service_account`. If non-empty `scopes`
+  are configured on the service account, the provider creates the service account
+  without a default key and then creates one scoped key through the same
+  service-account API-key creation path used by `openai_project_api_key`.
+
   | Terraform surface | Kind | Purpose | Import ID / Lookup |
   | --- | --- | --- | --- |
   | `openai_project` | Resource | Create and update organization projects. Destroy archives the project. | `proj_123` |
   | `openai_projects` / `openai_project` | Data sources | List projects or read a project by ID. | `id` |
-  | `openai_service_account` | Resource | Create project service accounts without implicit default keys. | `proj_123/svc_acct_123` |
+  | `openai_service_account` | Resource | Create project service accounts and capture the default or scoped bootstrap API key. | `proj_123/svc_acct_123` |
   | `openai_service_accounts` / `openai_service_account` | Data sources | List or read service accounts for a project. | `project_id`, `id` |
-  | `openai_project_api_key` | Resource | Issue service-account project API keys with optional create-only scopes. | `proj_123/svc_acct_123/key_123` |
+  | `openai_project_api_key` | Resource | Create standalone service-account project API keys with optional create-only scopes. | `proj_123/svc_acct_123/key_123` |
   | `openai_project_role` | Resource | Manage project-scoped custom roles. | `proj_123/role_123` |
   | `openai_project_roles` / `openai_project_role` | Data sources | List or read project-scoped roles. | `project_id`, `id` |
 
@@ -340,7 +346,7 @@ usage: |-
 
   ## Common workflows by API group
 
-  ### Projects: bootstrap a project and issue a service-account API key
+  ### Projects: bootstrap a project and issue service-account API keys
 
   ```hcl
   resource "openai_project" "app" {
@@ -352,17 +358,23 @@ usage: |-
     project_id = openai_project.app.id
     name       = "search-prod"
     role       = "member"
+    scopes     = ["responses.read"]
   }
 
-  resource "openai_project_api_key" "app" {
+  output "service_account_api_key" {
+    value     = openai_service_account.app.api_key_value
+    sensitive = true
+  }
+
+  resource "openai_project_api_key" "worker" {
     project_id         = openai_project.app.id
     service_account_id = openai_service_account.app.id
-    name               = "search-prod"
-    scopes             = ["responses.read"]
+    name               = "search-prod-worker"
+    scopes             = ["responses.read", "models.read"]
   }
 
-  output "project_api_key" {
-    value     = openai_project_api_key.app.value
+  output "worker_project_api_key" {
+    value     = openai_project_api_key.worker.value
     sensitive = true
   }
   ```
