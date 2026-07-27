@@ -2,6 +2,8 @@
 
 API group: [Organization Controls](../api-groups/organization-controls.md).
 
+OpenAI API hierarchy: `Administration > Organization > Invites`.
+
 Creates an OpenAI organization invite. Invites are immutable after creation;
 changes to `email`, `role`, or `projects` replace the invite.
 

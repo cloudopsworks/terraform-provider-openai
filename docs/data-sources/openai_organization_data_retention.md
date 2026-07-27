@@ -2,6 +2,8 @@
 
 API group: [Organization Controls](../api-groups/organization-controls.md).
 
+OpenAI API hierarchy: `Administration > Organization > Data Retention`.
+
 Reads the current OpenAI organization data-retention mode.
 
 ## Example Usage

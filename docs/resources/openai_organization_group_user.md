@@ -2,6 +2,8 @@
 
 API group: [Organization Groups](../api-groups/organization-groups.md).
 
+OpenAI API hierarchy: `Administration > Organization > Groups > Users`.
+
 Manages membership of an OpenAI organization user in a group. Destroy removes the user from the group.
 
 ## Example Usage

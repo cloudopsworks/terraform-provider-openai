@@ -2,6 +2,8 @@
 
 API group: [Organization Controls](../api-groups/organization-controls.md).
 
+OpenAI API hierarchy: `Administration > Organization > Spend Alerts`.
+
 Creates and manages an OpenAI organization spend alert. Spend alerts notify email
 recipients when organization spend reaches the configured threshold.
 

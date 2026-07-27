@@ -254,14 +254,90 @@ usage: |-
 
   ## API group documentation
 
-  The provider documentation is organized by OpenAI Administration API group. Use
-  the catalog below to choose the right Terraform surface, then open the detailed
-  resource/data-source page or the group guide under `docs/api-groups/`.
+  The provider documentation mirrors the OpenAI Administration API documentation
+  hierarchy. Use the hierarchy map below to choose the right Terraform surface,
+  then open the detailed resource/data-source page or group guide under
+  `docs/api-groups/`.
 
-  ### Projects API group
+  OpenAI API hierarchy represented by this provider:
 
-  Use this group to manage project containers, service accounts, project-scoped
-  service-account API keys, and project custom roles.
+  - Administration
+    - Organization
+      - Admin API Keys
+      - Invites
+      - Users
+        - Roles
+      - Groups
+        - Users
+        - Roles
+      - Roles
+      - Data Retention
+      - Spend Limit
+      - Spend Alerts
+      - Certificates
+      - Projects
+        - Service Accounts
+          - API Keys
+        - API Keys
+        - Roles
+        - Users *(evaluated; not implemented yet)*
+          - Roles *(evaluated; not implemented yet)*
+        - Groups *(evaluated; not implemented yet)*
+          - Roles *(evaluated; not implemented yet)*
+        - Rate Limits *(evaluated; not implemented yet)*
+        - Model Permissions *(evaluated; not implemented yet)*
+        - Hosted Tool Permissions *(evaluated; not implemented yet)*
+        - Data Retention *(evaluated; not implemented yet)*
+        - Spend Limit *(evaluated; not implemented yet)*
+        - Spend Alerts *(evaluated; not implemented yet)*
+        - Certificates *(evaluated; not implemented yet)*
+
+  ### Implemented Terraform mapping
+
+  | OpenAI API hierarchy | Guide | Primary Terraform surfaces |
+  | --- | --- | --- |
+  | Administration > Organization > Admin API Keys | `docs/api-groups/admin-api-keys.md` | `openai_admin_api_key`, `openai_admin_api_keys` |
+  | Administration > Organization > Invites | `docs/api-groups/organization-controls.md` | `openai_organization_invite`, `openai_organization_invites` |
+  | Administration > Organization > Users | `docs/api-groups/organization-users.md` | `openai_organization_user`, `openai_organization_users` |
+  | Administration > Organization > Users > Roles | `docs/api-groups/roles-and-assignments.md` | `openai_organization_user_role`, `openai_organization_user_roles` |
+  | Administration > Organization > Groups | `docs/api-groups/organization-groups.md` | `openai_organization_group`, `openai_organization_groups` |
+  | Administration > Organization > Groups > Users | `docs/api-groups/organization-groups.md` | `openai_organization_group_user`, `openai_organization_group_users` |
+  | Administration > Organization > Groups > Roles | `docs/api-groups/organization-groups.md` | `openai_organization_group_role`, `openai_organization_group_roles` |
+  | Administration > Organization > Roles | `docs/api-groups/roles-and-assignments.md` | `openai_organization_role`, `openai_organization_roles` |
+  | Administration > Organization > Data Retention | `docs/api-groups/organization-controls.md` | `openai_organization_data_retention` |
+  | Administration > Organization > Spend Limit | `docs/api-groups/organization-controls.md` | `openai_organization_spend_limit` |
+  | Administration > Organization > Spend Alerts | `docs/api-groups/organization-controls.md` | `openai_organization_spend_alert`, `openai_organization_spend_alerts` |
+  | Administration > Organization > Certificates | `docs/api-groups/organization-controls.md` | `openai_organization_certificate`, `openai_organization_certificates` |
+  | Administration > Organization > Projects | `docs/api-groups/projects.md` | `openai_project`, `openai_projects` |
+  | Administration > Organization > Projects > Service Accounts | `docs/api-groups/projects.md` | `openai_service_account`, `openai_service_accounts` |
+  | Administration > Organization > Projects > Service Accounts > API Keys | `docs/api-groups/projects.md` | `openai_project_api_key` |
+  | Administration > Organization > Projects > Roles | `docs/api-groups/projects.md`, `docs/api-groups/roles-and-assignments.md` | `openai_project_role`, `openai_project_roles` |
+
+  Evaluated project sub-APIs that are called out in the OpenAI hierarchy but not
+  implemented yet:
+
+  - Administration > Organization > Projects > Users
+  - Administration > Organization > Projects > Users > Roles
+  - Administration > Organization > Projects > Groups
+  - Administration > Organization > Projects > Groups > Roles
+  - Administration > Organization > Projects > Rate Limits
+  - Administration > Organization > Projects > Model Permissions
+  - Administration > Organization > Projects > Hosted Tool Permissions
+  - Administration > Organization > Projects > Data Retention
+  - Administration > Organization > Projects > Spend Limit
+  - Administration > Organization > Projects > Spend Alerts
+  - Administration > Organization > Projects > Certificates
+
+  Their evaluated implementation path and maintainability guidance are captured in
+  `docs/api-groups/organization-controls.md#project-sub-api-evaluation-and-maintainability-opportunities`
+  for future implementation.
+
+  ### Administration > Organization > Projects
+
+  OpenAI hierarchy covered: Administration > Organization > Projects, Projects >
+  Service Accounts, Projects > Service Accounts > API Keys, Projects > API Keys,
+  and Projects > Roles. Use this group to manage project containers, service
+  accounts, project-scoped service-account API keys, and project custom roles.
 
   OpenAI service-account creation returns a default unredacted API key. The
   provider captures that key on `openai_service_account`. If non-empty `scopes`
@@ -281,9 +357,10 @@ usage: |-
 
   Guide: `docs/api-groups/projects.md`.
 
-  ### Admin API Keys API group
+  ### Administration > Organization > Admin API Keys
 
-  Use this group to rotate or manage organization admin API keys used for
+  OpenAI hierarchy covered: Administration > Organization > Admin API Keys. Use
+  this group to rotate or manage organization admin API keys used for
   administration automation.
 
   | Terraform surface | Kind | Purpose | Import ID / Lookup |
@@ -303,10 +380,12 @@ usage: |-
 
   Guide: `docs/api-groups/admin-api-keys.md`.
 
-  ### Organization Controls API group
+  ### Administration > Organization > Invites, Data Retention, Spend Limit, Spend Alerts, Certificates
 
-  Use this group to manage organization-wide controls: pending invites, data
-  retention, hard spend limits, spend-alert notifications, and certificates.
+  OpenAI hierarchy covered: Administration > Organization > Invites, Data
+  Retention, Spend Limit, Spend Alerts, and Certificates. Use this group to
+  manage organization-wide controls: pending invites, data retention, hard spend
+  limits, spend-alert notifications, and certificates.
 
   | Terraform surface | Kind | Purpose | Import ID / Lookup |
   | --- | --- | --- | --- |
@@ -328,11 +407,12 @@ usage: |-
 
   Guide: `docs/api-groups/organization-controls.md`.
 
-  ### Organization Users API group
+  ### Administration > Organization > Users
 
-  Use this group to discover accepted organization users before assigning groups
-  or roles. Accepted users are data-source only in this provider version; pending
-  invitations are managed by `openai_organization_invite`.
+  OpenAI hierarchy covered: Administration > Organization > Users and Users >
+  Roles. Use this group to discover accepted organization users before assigning
+  groups or roles. Accepted users are data-source only in this provider version;
+  pending invitations are managed by `openai_organization_invite`.
 
   | Terraform surface | Kind | Purpose | Lookup |
   | --- | --- | --- | --- |
@@ -341,9 +421,11 @@ usage: |-
 
   Guide: `docs/api-groups/organization-users.md`.
 
-  ### Organization Groups API group
+  ### Administration > Organization > Groups
 
-  Use this group to manage organization groups and explicit group membership.
+  OpenAI hierarchy covered: Administration > Organization > Groups, Groups >
+  Users, and Groups > Roles. Use this group to manage organization groups,
+  explicit group membership, and group role assignments.
 
   | Terraform surface | Kind | Purpose | Import ID / Lookup |
   | --- | --- | --- | --- |
@@ -354,10 +436,12 @@ usage: |-
 
   Guide: `docs/api-groups/organization-groups.md`.
 
-  ### Roles and Assignments API group
+  ### Administration > Organization > Roles and Project Roles
 
-  Use this group to define organization/project custom roles and assign
-  organization roles to users or groups.
+  OpenAI hierarchy covered: Administration > Organization > Roles, Users > Roles,
+  Groups > Roles, and Projects > Roles. Use this group to define
+  organization/project custom roles and assign organization roles to users or
+  groups.
 
   | Terraform surface | Kind | Purpose | Import ID / Lookup |
   | --- | --- | --- | --- |

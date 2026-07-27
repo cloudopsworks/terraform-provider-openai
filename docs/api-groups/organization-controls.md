@@ -1,8 +1,16 @@
-# Organization Controls API group
+# Administration > Organization > Controls
 
 Use the Organization Controls API group to manage OpenAI organization-wide
 administration controls that are not tied to a single project: invites, data
 retention, hard spend limits, spend alerts, and certificate upload/activation.
+
+## OpenAI API hierarchy covered
+
+- Administration > Organization > Invites
+- Administration > Organization > Data Retention
+- Administration > Organization > Spend Limit
+- Administration > Organization > Spend Alerts
+- Administration > Organization > Certificates
 
 ## Terraform surfaces
 

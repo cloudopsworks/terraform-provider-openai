@@ -2,6 +2,8 @@
 
 API group: [Roles and Assignments](../api-groups/roles-and-assignments.md).
 
+OpenAI API hierarchy: `Administration > Organization > Groups > Roles`.
+
 Assigns an OpenAI organization role to a group. Destroy unassigns the role.
 
 ## Example Usage

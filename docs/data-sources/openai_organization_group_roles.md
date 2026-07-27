@@ -2,6 +2,8 @@
 
 API group: [Roles and Assignments](../api-groups/roles-and-assignments.md).
 
+OpenAI API hierarchy: `Administration > Organization > Groups > Roles`.
+
 Lists organization role assignments for an OpenAI organization group.
 
 ## Example Usage

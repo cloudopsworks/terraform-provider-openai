@@ -2,6 +2,8 @@
 
 API group: [Projects](../api-groups/projects.md).
 
+OpenAI API hierarchy: `Administration > Organization > Projects > Service Accounts`.
+
 Lists OpenAI project service accounts through the Administration API.
 
 ## Example Usage

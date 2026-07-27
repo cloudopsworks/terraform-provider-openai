@@ -2,6 +2,8 @@
 
 API group: [Organization Controls](../api-groups/organization-controls.md).
 
+OpenAI API hierarchy: `Administration > Organization > Certificates`.
+
 Reads one OpenAI organization certificate by ID. Set `include_content = true` only
 when the PEM content is needed and the Terraform state backend is protected.
 

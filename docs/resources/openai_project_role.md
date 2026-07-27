@@ -2,6 +2,8 @@
 
 API group: [Roles and Assignments](../api-groups/roles-and-assignments.md).
 
+OpenAI API hierarchy: `Administration > Organization > Projects > Roles`.
+
 Manages an OpenAI project custom role. Destroy deletes the custom project role. Use `prevent_destroy` for critical project access roles.
 
 ## Example Usage

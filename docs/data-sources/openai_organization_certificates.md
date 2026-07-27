@@ -2,6 +2,8 @@
 
 API group: [Organization Controls](../api-groups/organization-controls.md).
 
+OpenAI API hierarchy: `Administration > Organization > Certificates`.
+
 Lists OpenAI organization certificates and active status. PEM content is not
 included in list results.
 

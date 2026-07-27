@@ -2,6 +2,8 @@
 
 API group: [Projects](../api-groups/projects.md).
 
+OpenAI API hierarchy: `Administration > Organization > Projects > Service Accounts`.
+
 Manages an OpenAI project service account through the Administration API. By
 OpenAI API default, creating a service account also returns one unredacted API key
 for that service account; the provider captures that bootstrap key in

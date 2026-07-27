@@ -2,6 +2,8 @@
 
 API group: [Organization Controls](../api-groups/organization-controls.md).
 
+OpenAI API hierarchy: `Administration > Organization > Spend Alerts`.
+
 Reads one OpenAI organization spend alert by ID.
 
 ## Example Usage

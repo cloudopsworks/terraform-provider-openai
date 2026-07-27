@@ -1,7 +1,13 @@
-# Organization Groups API group
+# Administration > Organization > Groups
 
 Use the Organization Groups API group to create groups, read groups, and manage
 explicit user membership in groups.
+
+## OpenAI API hierarchy covered
+
+- Administration > Organization > Groups
+- Administration > Organization > Groups > Users
+- Administration > Organization > Groups > Roles
 
 ## Terraform surfaces
 

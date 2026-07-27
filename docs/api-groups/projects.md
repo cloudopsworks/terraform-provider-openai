@@ -1,4 +1,4 @@
-# Projects API group
+# Administration > Organization > Projects
 
 Use the Projects API group for OpenAI project lifecycle, project service accounts,
 project-scoped service-account API keys, and project custom roles.
@@ -8,6 +8,14 @@ created. The provider captures that key on `openai_service_account`. If non-empt
 `scopes` are configured on the service account, the provider uses OpenAI's
 create-only service-account mode and then creates the scoped key through the same
 API-key creation path used by `openai_project_api_key`.
+
+## OpenAI API hierarchy covered
+
+- Administration > Organization > Projects
+- Administration > Organization > Projects > Service Accounts
+- Administration > Organization > Projects > Service Accounts > API Keys
+- Administration > Organization > Projects > API Keys
+- Administration > Organization > Projects > Roles
 
 ## Terraform surfaces
 

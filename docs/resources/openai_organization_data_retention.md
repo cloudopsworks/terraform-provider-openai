@@ -2,6 +2,8 @@
 
 API group: [Organization Controls](../api-groups/organization-controls.md).
 
+OpenAI API hierarchy: `Administration > Organization > Data Retention`.
+
 Manages the organization-wide OpenAI data-retention mode. This is a singleton
 setting and uses the synthetic Terraform ID `organization`.
 

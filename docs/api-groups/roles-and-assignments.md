@@ -1,7 +1,14 @@
-# Roles and Assignments API group
+# Administration > Organization > Roles and Project Roles
 
 Use the Roles and Assignments API group to manage organization custom roles,
 project custom roles, and organization role assignments for users or groups.
+
+## OpenAI API hierarchy covered
+
+- Administration > Organization > Roles
+- Administration > Organization > Users > Roles
+- Administration > Organization > Groups > Roles
+- Administration > Organization > Projects > Roles
 
 ## Terraform surfaces
 

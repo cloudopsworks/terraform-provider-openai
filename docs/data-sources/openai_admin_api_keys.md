@@ -2,6 +2,8 @@
 
 API group: [Admin API Keys](../api-groups/admin-api-keys.md).
 
+OpenAI API hierarchy: `Administration > Organization > Admin API Keys`.
+
 Lists OpenAI organization admin API keys. Values are redacted.
 
 ## Example Usage

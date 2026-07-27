@@ -2,6 +2,8 @@
 
 API group: [Organization Controls](../api-groups/organization-controls.md).
 
+OpenAI API hierarchy: `Administration > Organization > Spend Limit`.
+
 Reads the current OpenAI organization hard spend limit.
 
 ## Example Usage

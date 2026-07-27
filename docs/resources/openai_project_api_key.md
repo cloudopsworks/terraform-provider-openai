@@ -2,6 +2,8 @@
 
 API group: [Projects](../api-groups/projects.md).
 
+OpenAI API hierarchy: `Administration > Organization > Projects > Service Accounts > API Keys`.
+
 Creates a standalone OpenAI project API key owned by a project service account.
 This resource uses the same service-account API-key creation path that
 `openai_service_account` uses for scoped bootstrap keys. The unredacted `value` is

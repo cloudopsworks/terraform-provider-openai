@@ -2,6 +2,8 @@
 
 API group: [Organization Controls](../api-groups/organization-controls.md).
 
+OpenAI API hierarchy: `Administration > Organization > Invites`.
+
 Lists OpenAI organization invites.
 
 ## Example Usage

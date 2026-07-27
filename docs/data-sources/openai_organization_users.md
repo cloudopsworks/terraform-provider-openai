@@ -2,6 +2,8 @@
 
 API group: [Organization Users](../api-groups/organization-users.md).
 
+OpenAI API hierarchy: `Administration > Organization > Users`.
+
 Lists OpenAI organization users.
 
 ## Example Usage

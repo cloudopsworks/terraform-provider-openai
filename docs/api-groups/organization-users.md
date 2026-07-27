@@ -1,9 +1,14 @@
-# Organization Users API group
+# Administration > Organization > Users
 
 Use the Organization Users API group to discover existing users before managing
 group membership or role assignments. This provider exposes accepted users as
 data sources only; invite lifecycle is managed by `openai_organization_invite`,
 and accepted-user deletion is not exposed in this provider version.
+
+## OpenAI API hierarchy covered
+
+- Administration > Organization > Users
+- Administration > Organization > Users > Roles
 
 ## Terraform surfaces
 

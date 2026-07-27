@@ -2,6 +2,8 @@
 
 API group: [Organization Groups](../api-groups/organization-groups.md).
 
+OpenAI API hierarchy: `Administration > Organization > Groups > Users`.
+
 Looks up one OpenAI organization group membership by group ID and user ID.
 
 ## Example Usage

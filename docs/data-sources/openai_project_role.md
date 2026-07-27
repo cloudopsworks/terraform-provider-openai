@@ -2,6 +2,8 @@
 
 API group: [Roles and Assignments](../api-groups/roles-and-assignments.md).
 
+OpenAI API hierarchy: `Administration > Organization > Projects > Roles`.
+
 Looks up one OpenAI project role by project ID and role ID.
 
 ## Example Usage

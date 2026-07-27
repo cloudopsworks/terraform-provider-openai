@@ -2,6 +2,8 @@
 
 API group: [Organization Controls](../api-groups/organization-controls.md).
 
+OpenAI API hierarchy: `Administration > Organization > Certificates`.
+
 Uploads an OpenAI organization certificate and optionally activates it at the
 organization scope. OpenAI does not auto-activate uploaded certificates.
 

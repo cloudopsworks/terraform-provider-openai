@@ -1,7 +1,11 @@
-# Admin API Keys API group
+# Administration > Organization > Admin API Keys
 
 Use the Admin API Keys API group to create, rotate, read, and revoke organization
 admin API keys used by automation that calls OpenAI Administration APIs.
+
+## OpenAI API hierarchy covered
+
+- Administration > Organization > Admin API Keys
 
 ## Terraform surfaces
 

@@ -2,6 +2,8 @@
 
 API group: [Projects](../api-groups/projects.md).
 
+OpenAI API hierarchy: `Administration > Organization > Projects > Service Accounts`.
+
 Looks up one OpenAI project service account through the Administration API.
 
 Use `id` for direct lookup. When `id` is omitted, the provider performs an exact

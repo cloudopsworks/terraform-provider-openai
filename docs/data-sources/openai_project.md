@@ -2,6 +2,8 @@
 
 API group: [Projects](../api-groups/projects.md).
 
+OpenAI API hierarchy: `Administration > Organization > Projects`.
+
 Looks up one OpenAI organization project through the Administration API.
 
 Use `id` for a direct project retrieve lookup.

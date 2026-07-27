@@ -2,6 +2,8 @@
 
 API group: [Organization Controls](../api-groups/organization-controls.md).
 
+OpenAI API hierarchy: `Administration > Organization > Spend Limit`.
+
 Manages the organization hard monthly spend limit. This is a singleton setting
 and uses the synthetic Terraform ID `organization`.
 

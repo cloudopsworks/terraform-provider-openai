@@ -2,6 +2,8 @@
 
 API group: [Projects](../api-groups/projects.md).
 
+OpenAI API hierarchy: `Administration > Organization > Projects`.
+
 Lists OpenAI organization projects through the Administration API.
 
 ## Example Usage
@@ -35,4 +37,3 @@ Each `items` element includes:
 - `status` (String) Project status, such as `active` or `archived`.
 - `created_at` (Number) Unix timestamp for project creation.
 - `archived_at` (Number) Unix timestamp for project archival when archived.
-
