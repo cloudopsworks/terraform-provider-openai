@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -39,6 +40,15 @@ func NewWithSettings(settings Settings, userAgent string, timeout time.Duration)
 	return newWithHTTPClient(settings, userAgent, &http.Client{Timeout: timeout})
 }
 
+func terraformLogEnablesOpenAIDebugLog(tfLog string) bool {
+	switch strings.ToUpper(strings.TrimSpace(tfLog)) {
+	case "TRACE", "JSON":
+		return true
+	default:
+		return false
+	}
+}
+
 func newWithHTTPClient(settings Settings, userAgent string, httpClient *http.Client) *OpenAIAdminClient {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
@@ -46,6 +56,9 @@ func newWithHTTPClient(settings Settings, userAgent string, httpClient *http.Cli
 	opts := []option.RequestOption{
 		option.WithAdminAPIKey(settings.AdminAPIKey),
 		option.WithHTTPClient(httpClient),
+	}
+	if terraformLogEnablesOpenAIDebugLog(os.Getenv("TF_LOG")) {
+		opts = append(opts, option.WithDebugLog(nil))
 	}
 	if strings.TrimSpace(settings.BaseURL) != "" {
 		opts = append(opts, option.WithBaseURL(strings.TrimRight(settings.BaseURL, "/")))

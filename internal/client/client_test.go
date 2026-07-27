@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"testing"
@@ -231,6 +232,87 @@ func TestOpenAIAdminClientSettingsHeaders(t *testing.T) {
 	if _, err := cl.ListProjects(context.Background(), ProjectListRequest{}); err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
+}
+
+func TestTerraformLogEnablesOpenAIDebugLog(t *testing.T) {
+	tests := map[string]bool{
+		"TRACE":   true,
+		"trace":   true,
+		" trace ": true,
+		"JSON":    true,
+		"DEBUG":   false,
+		"INFO":    false,
+		"WARN":    false,
+		"ERROR":   false,
+		"OFF":     false,
+		"":        false,
+	}
+	for value, want := range tests {
+		if got := terraformLogEnablesOpenAIDebugLog(value); got != want {
+			t.Fatalf("terraformLogEnablesOpenAIDebugLog(%q) = %t, want %t", value, got, want)
+		}
+	}
+}
+
+func TestOpenAIAdminClientDebugLogEnabledByTFLogTrace(t *testing.T) {
+	t.Setenv("TF_LOG", "TRACE")
+	var logBuffer bytes.Buffer
+	restoreDefaultLogger(t, &logBuffer)
+
+	cl := testClient(func(r *http.Request) (*http.Response, error) {
+		if got := r.Header.Get("Authorization"); got != "Bearer admin-key" {
+			t.Fatalf("Authorization header = %q", got)
+		}
+		return jsonResponse(map[string]any{"data": []map[string]any{}, "has_more": false}), nil
+	})
+	if _, err := cl.ListProjects(context.Background(), ProjectListRequest{}); err != nil {
+		t.Fatalf("ListProjects() error = %v", err)
+	}
+
+	logs := logBuffer.String()
+	if !strings.Contains(logs, "Request Content:") || !strings.Contains(logs, "Response Content:") {
+		t.Fatalf("expected OpenAI debug request/response logs, got %q", logs)
+	}
+	if !strings.Contains(logs, "GET /organization/projects") {
+		t.Fatalf("expected request path in debug logs, got %q", logs)
+	}
+	if !strings.Contains(logs, "Authorization: ***") {
+		t.Fatalf("expected redacted authorization header in debug logs, got %q", logs)
+	}
+	if strings.Contains(logs, "admin-key") {
+		t.Fatalf("debug logs leaked admin key: %q", logs)
+	}
+}
+
+func TestOpenAIAdminClientDebugLogDisabledBelowTrace(t *testing.T) {
+	t.Setenv("TF_LOG", "DEBUG")
+	var logBuffer bytes.Buffer
+	restoreDefaultLogger(t, &logBuffer)
+
+	cl := testClient(func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(map[string]any{"data": []map[string]any{}, "has_more": false}), nil
+	})
+	if _, err := cl.ListProjects(context.Background(), ProjectListRequest{}); err != nil {
+		t.Fatalf("ListProjects() error = %v", err)
+	}
+	if logs := logBuffer.String(); logs != "" {
+		t.Fatalf("expected no OpenAI debug logs for TF_LOG=DEBUG, got %q", logs)
+	}
+}
+
+func restoreDefaultLogger(t *testing.T, output io.Writer) {
+	t.Helper()
+	previousWriter := log.Writer()
+	previousFlags := log.Flags()
+	previousPrefix := log.Prefix()
+	log.SetOutput(output)
+	log.SetFlags(0)
+	log.SetPrefix("")
+	t.Cleanup(func() {
+		log.SetOutput(previousWriter)
+		log.SetFlags(previousFlags)
+		log.SetPrefix(previousPrefix)
+	})
 }
 
 func TestValidationErrors(t *testing.T) {
