@@ -33,13 +33,6 @@ config:
   # Configure repository to enable branch protection
   # https://docs.github.com/en/rest/reference/repos#update-branch-protection
   branchProtection: true
-  # Configure the repository to enable conventional commits Ruleset - This requires PRO/Enterprise/Teams Paid Plan to work, Free plans not-supported.
-  conventionalCommitsEnabled: false
-  # Configure the repository to enforce conventional commits
-  enforceConventionalCommits: false
-  # Configure the repository to enforce custom commits messages pattern
-  enforceCustomCommitsPattern: false
-  enforceCustomCommitsPatternRegex: "PROJECT-[0-9]+" #sample regex to enforce commit messages to have a JIRA ticket number in the format PROJECT-1234
   # Configure the repository to use Git Flow and or support Branches enablement
   gitFlow:
     enabled: true
@@ -56,17 +49,17 @@ config:
   requiredReviewers: 1
 
   # Required: needed if not automatic or protection is true
-  reviewers: []
-  #  - elasticguru-bot
-  #  - cloudopsworks-dev
-  #  - cloudopsworks/engineering
+  reviewers:
+    - cloudopsworks-bot
+    - cloudopsworks-dev
+    - cloudopsworks/engineering
 
   # Required: needed for permit owners to perform commits under protected branches.
   # Teams are specified as org/team-name
-  owners: []
-  #  - elasticguru-bot
-  #  - cloudopsworks-dev
-  #  - cloudopsworks/admin
+  owners:
+    - berahac
+    - cloudopsworks-dev
+    - cloudopsworks/admin
 
   # Optional configure the repository members
   contributors:
@@ -148,3 +141,6 @@ cd:
       - match: 1.3.*
         env: demo2
         targetName: demo2
+
+############ DO NOT MODIFY BELOW ############
+#workflow-version-tag: v1.3.35 - hash: 6e7866e40bbe1b1b65fa2c5ff5011d92330fdf29

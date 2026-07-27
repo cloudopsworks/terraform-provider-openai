@@ -1,0 +1,585 @@
+# OpenAI provider
+
+## Installation
+
+Declare the provider in the root module. Pin a version in production once a release is selected.
+
+```hcl
+terraform {
+  required_providers {
+    openai = {
+      source = "cloudopsworks/openai"
+      # version = "~> 0.1"
+    }
+  }
+}
+```
+
+## Provider initialization
+
+The provider configures an OpenAI Administration API client. Every resource and
+data source requires an OpenAI admin API key supplied directly, by environment
+variable, or by resolving exactly one supported secret manager.
+
+Resolution order:
+
+1. Explicit provider arguments: `admin_api_key`, `base_url`, `organization_id`, and `project_id`.
+2. OpenAI environment variables: `OPENAI_ADMIN_KEY` or `OPENAI_ADMIN_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_ORG_ID` or `OPENAI_ORGANIZATION_ID`, and `OPENAI_PROJECT_ID`.
+3. One cloud secret source when no direct admin key is configured.
+
+Direct provider arguments and OpenAI environment variables override fields read
+from a secret payload. If `admin_api_key` or `OPENAI_ADMIN_KEY` /
+`OPENAI_ADMIN_API_KEY` is set, cloud secret-manager blocks are ignored for key
+resolution.
+
+### Direct initialization
+
+Use this for local development, secure CI variables, or platforms that inject the
+admin key as a sensitive Terraform variable.
+
+```hcl
+provider "openai" {
+  admin_api_key   = var.openai_admin_api_key
+  organization_id = var.openai_organization_id # optional
+  project_id      = var.openai_project_id      # optional
+  base_url        = var.openai_base_url        # optional, for compatible gateways/tests
+}
+
+variable "openai_admin_api_key" {
+  type      = string
+  sensitive = true
+}
+```
+
+### Environment-only initialization
+
+When the provider block is empty, the provider reads OpenAI environment
+variables. This is useful in CI runners and local shells where secrets are
+already managed outside Terraform.
+
+```hcl
+provider "openai" {}
+```
+
+```sh
+export OPENAI_ADMIN_KEY="sk-admin-..."
+export OPENAI_ORG_ID="org_..."        # optional
+export OPENAI_PROJECT_ID="proj_..."   # optional
+export OPENAI_BASE_URL="https://api.openai.com/v1" # optional
+```
+
+### AWS Secrets Manager initialization with AssumeRole
+
+The AWS source uses the AWS SDK default credential chain as the base identity,
+then optionally assumes `role_arn` before reading the secret. Do not pass raw AWS
+access keys to this provider; use the standard AWS environment, profile, web
+identity, instance metadata, or other SDK-supported authentication sources.
+
+```hcl
+provider "openai" {
+  aws_secrets_manager = {
+    region            = "us-east-1"
+    secret_id         = "prod/openai/admin"
+    version_stage     = "AWSCURRENT"
+    role_arn          = "arn:aws:iam::123456789012:role/openai-secret-reader"
+    role_session_name = "terraform-provider-openai"
+    external_id       = var.aws_external_id
+    duration_seconds  = 3600
+    json_key          = "admin_api_key"
+  }
+}
+```
+
+AWS secret-source environment discovery is also supported when no direct admin
+key and no HCL secret-source block is configured:
+
+| Purpose | Environment variables |
+| --- | --- |
+| Secret ID | `OPENAI_AWS_SECRETS_MANAGER_SECRET_ID`, `OPENAI_AWS_SECRET_ID` |
+| Region | `OPENAI_AWS_SECRETS_MANAGER_REGION`, `AWS_REGION`, `AWS_DEFAULT_REGION` |
+| Version | `OPENAI_AWS_SECRETS_MANAGER_VERSION_ID`, `OPENAI_AWS_SECRETS_MANAGER_VERSION_STAGE` |
+| JSON key | `OPENAI_AWS_SECRETS_MANAGER_JSON_KEY` |
+| Assume role | `OPENAI_AWS_SECRETS_MANAGER_ROLE_ARN`, `OPENAI_AWS_ROLE_ARN` |
+| Session name | `OPENAI_AWS_SECRETS_MANAGER_ROLE_SESSION_NAME`, `OPENAI_AWS_ROLE_SESSION_NAME` |
+| External ID | `OPENAI_AWS_SECRETS_MANAGER_EXTERNAL_ID`, `OPENAI_AWS_EXTERNAL_ID` |
+| Session duration | `OPENAI_AWS_SECRETS_MANAGER_DURATION_SECONDS`, `OPENAI_AWS_ROLE_DURATION_SECONDS` |
+
+### GCP Secret Manager initialization with service-account impersonation
+
+The GCP source uses Application Default Credentials as the base identity and can
+impersonate a target service account before reading the secret.
+
+```hcl
+provider "openai" {
+  gcp_secret_manager = {
+    project_id                  = "platform-prod"
+    secret_id                   = "openai-admin-key"
+    version                     = "latest"
+    impersonate_service_account = "openai-secret-reader@platform-prod.iam.gserviceaccount.com"
+    delegates                   = []
+    scopes                      = ["https://www.googleapis.com/auth/cloud-platform"]
+    json_key                    = "admin_api_key"
+  }
+}
+```
+
+GCP secret-source environment discovery is supported when no direct admin key and
+no HCL secret-source block is configured:
+
+| Purpose | Environment variables |
+| --- | --- |
+| Project ID | `OPENAI_GCP_SECRET_MANAGER_PROJECT_ID`, `GOOGLE_CLOUD_PROJECT`, `GCLOUD_PROJECT` |
+| Secret ID | `OPENAI_GCP_SECRET_MANAGER_SECRET_ID`, `OPENAI_GCP_SECRET_ID` |
+| Version | `OPENAI_GCP_SECRET_MANAGER_VERSION` |
+| JSON key | `OPENAI_GCP_SECRET_MANAGER_JSON_KEY` |
+| Impersonated service account | `OPENAI_GCP_SECRET_MANAGER_IMPERSONATE_SERVICE_ACCOUNT`, `OPENAI_GCP_IMPERSONATE_SERVICE_ACCOUNT` |
+| Delegates | `OPENAI_GCP_SECRET_MANAGER_DELEGATES` (comma-separated) |
+| OAuth scopes | `OPENAI_GCP_SECRET_MANAGER_SCOPES` (comma-separated) |
+
+### Azure Key Vault initialization
+
+The Azure source reads a Key Vault secret using `DefaultAzureCredential`.
+Configure Azure authentication using the standard Azure SDK mechanisms for your
+environment, then point the provider at the vault and secret name.
+
+```hcl
+provider "openai" {
+  azure_key_vault = {
+    vault_url   = "https://platform-prod.vault.azure.net/"
+    secret_name = "openai-admin-key"
+    version     = "" # optional; omit or leave empty for latest
+    json_key    = "admin_api_key"
+  }
+}
+```
+
+### Secret payload formats
+
+Secret values can be plaintext or JSON.
+
+Plaintext secret:
+
+```text
+sk-admin-...
+```
+
+JSON secret without `json_key`:
+
+```json
+{
+  "admin_api_key": "sk-admin-...",
+  "base_url": "https://api.openai.com/v1",
+  "organization_id": "org_...",
+  "project_id": "proj_..."
+}
+```
+
+JSON secret with `json_key = "openai.admin_api_key"`:
+
+```json
+{
+  "openai": {
+    "admin_api_key": "sk-admin-..."
+  }
+}
+```
+
+When `json_key` is set, only that key path is used as the admin API key. When it
+is omitted and the payload is a JSON object, the provider reads
+`admin_api_key`/`api_key` and optional `base_url`, `organization_id`, and
+`project_id` aliases from the object.
+
+## Provider arguments
+
+| Argument | Required | Sensitive | Description |
+| --- | --- | --- | --- |
+| `admin_api_key` | No | Yes | Existing OpenAI admin API key. Highest-precedence key source. |
+| `base_url` | No | No | Optional OpenAI API base URL override for tests or compatible/private gateways. |
+| `organization_id` | No | No | Optional organization header value. |
+| `project_id` | No | No | Optional project header value. |
+| `aws_secrets_manager` | No | No | Reads provider settings from AWS Secrets Manager; supports `role_arn` assume-role. |
+| `gcp_secret_manager` | No | No | Reads provider settings from GCP Secret Manager; supports service-account impersonation. |
+| `azure_key_vault` | No | No | Reads provider settings from Azure Key Vault. |
+
+Configure only one cloud secret source when no direct admin key is present. The
+provider fails fast if multiple secret sources are configured or discovered.
+
+## API group documentation
+
+The provider documentation mirrors the OpenAI Administration API documentation
+hierarchy. Use the hierarchy map below to choose the right Terraform surface,
+then open the detailed resource/data-source page or group guide under
+`docs/api-groups/`.
+
+OpenAI API hierarchy represented by this provider:
+
+- Administration
+  - Organization
+    - Admin API Keys
+    - Invites
+    - Users
+      - Roles
+    - Groups
+      - Users
+      - Roles
+    - Roles
+    - Data Retention
+    - Spend Limit
+    - Spend Alerts
+    - Certificates
+    - Projects
+      - Service Accounts
+        - API Keys
+      - API Keys
+      - Roles
+      - Users *(evaluated; not implemented yet)*
+        - Roles *(evaluated; not implemented yet)*
+      - Groups *(evaluated; not implemented yet)*
+        - Roles *(evaluated; not implemented yet)*
+      - Rate Limits *(evaluated; not implemented yet)*
+      - Model Permissions *(evaluated; not implemented yet)*
+      - Hosted Tool Permissions *(evaluated; not implemented yet)*
+      - Data Retention *(evaluated; not implemented yet)*
+      - Spend Limit *(evaluated; not implemented yet)*
+      - Spend Alerts *(evaluated; not implemented yet)*
+      - Certificates *(evaluated; not implemented yet)*
+
+### Implemented Terraform mapping
+
+| OpenAI API hierarchy | Guide | Primary Terraform surfaces |
+| --- | --- | --- |
+| Administration > Organization > Admin API Keys | `docs/api-groups/admin-api-keys.md` | `openai_admin_api_key`, `openai_admin_api_keys` |
+| Administration > Organization > Invites | `docs/api-groups/organization-controls.md` | `openai_organization_invite`, `openai_organization_invites` |
+| Administration > Organization > Users | `docs/api-groups/organization-users.md` | `openai_organization_user`, `openai_organization_users` |
+| Administration > Organization > Users > Roles | `docs/api-groups/roles-and-assignments.md` | `openai_organization_user_role`, `openai_organization_user_roles` |
+| Administration > Organization > Groups | `docs/api-groups/organization-groups.md` | `openai_organization_group`, `openai_organization_groups` |
+| Administration > Organization > Groups > Users | `docs/api-groups/organization-groups.md` | `openai_organization_group_user`, `openai_organization_group_users` |
+| Administration > Organization > Groups > Roles | `docs/api-groups/organization-groups.md` | `openai_organization_group_role`, `openai_organization_group_roles` |
+| Administration > Organization > Roles | `docs/api-groups/roles-and-assignments.md` | `openai_organization_role`, `openai_organization_roles` |
+| Administration > Organization > Data Retention | `docs/api-groups/organization-controls.md` | `openai_organization_data_retention` |
+| Administration > Organization > Spend Limit | `docs/api-groups/organization-controls.md` | `openai_organization_spend_limit` |
+| Administration > Organization > Spend Alerts | `docs/api-groups/organization-controls.md` | `openai_organization_spend_alert`, `openai_organization_spend_alerts` |
+| Administration > Organization > Certificates | `docs/api-groups/organization-controls.md` | `openai_organization_certificate`, `openai_organization_certificates` |
+| Administration > Organization > Projects | `docs/api-groups/projects.md` | `openai_project`, `openai_projects` |
+| Administration > Organization > Projects > Service Accounts | `docs/api-groups/projects.md` | `openai_service_account`, `openai_service_accounts` |
+| Administration > Organization > Projects > Service Accounts > API Keys | `docs/api-groups/projects.md` | `openai_project_api_key` |
+| Administration > Organization > Projects > Roles | `docs/api-groups/projects.md`, `docs/api-groups/roles-and-assignments.md` | `openai_project_role`, `openai_project_roles` |
+
+Evaluated project sub-APIs that are called out in the OpenAI hierarchy but not
+implemented yet:
+
+- Administration > Organization > Projects > Users
+- Administration > Organization > Projects > Users > Roles
+- Administration > Organization > Projects > Groups
+- Administration > Organization > Projects > Groups > Roles
+- Administration > Organization > Projects > Rate Limits
+- Administration > Organization > Projects > Model Permissions
+- Administration > Organization > Projects > Hosted Tool Permissions
+- Administration > Organization > Projects > Data Retention
+- Administration > Organization > Projects > Spend Limit
+- Administration > Organization > Projects > Spend Alerts
+- Administration > Organization > Projects > Certificates
+
+Their evaluated implementation path and maintainability guidance are captured in
+`docs/api-groups/organization-controls.md#project-sub-api-evaluation-and-maintainability-opportunities`
+for future implementation.
+
+### Administration > Organization > Projects
+
+OpenAI hierarchy covered: Administration > Organization > Projects, Projects >
+Service Accounts, Projects > Service Accounts > API Keys, Projects > API Keys,
+and Projects > Roles. Use this group to manage project containers, service
+accounts, project-scoped service-account API keys, and project custom roles.
+
+OpenAI service-account creation returns a default unredacted API key. The
+provider captures that key on `openai_service_account`. If non-empty `scopes`
+are configured on the service account, the provider creates the service account
+without a default key and then creates one scoped key through the same
+service-account API-key creation path used by `openai_project_api_key`.
+
+| Terraform surface | Kind | Purpose | Import ID / Lookup |
+| --- | --- | --- | --- |
+| `openai_project` | Resource | Create and update organization projects. Destroy archives the project. | `proj_123` |
+| `openai_projects` / `openai_project` | Data sources | List projects or read a project by ID. | `id` |
+| `openai_service_account` | Resource | Create project service accounts and capture the default or scoped bootstrap API key. | `proj_123/svc_acct_123` |
+| `openai_service_accounts` / `openai_service_account` | Data sources | List or read service accounts for a project. | `project_id`, `id` |
+| `openai_project_api_key` | Resource | Create standalone service-account project API keys with optional create-only scopes. | `proj_123/svc_acct_123/key_123` |
+| `openai_project_role` | Resource | Manage project-scoped custom roles. | `proj_123/role_123` |
+| `openai_project_roles` / `openai_project_role` | Data sources | List or read project-scoped roles. | `project_id`, `id` |
+
+Guide: `docs/api-groups/projects.md`.
+
+### Administration > Organization > Admin API Keys
+
+OpenAI hierarchy covered: Administration > Organization > Admin API Keys. Use
+this group to rotate or manage organization admin API keys used for
+administration automation.
+
+| Terraform surface | Kind | Purpose | Import ID / Lookup |
+| --- | --- | --- | --- |
+| `openai_admin_api_key` | Resource | Issue organization admin API keys with optional expiration. Destroy revokes the key. | `admin_key_123` |
+| `openai_admin_api_keys` / `openai_admin_api_key` | Data sources | List or read admin key metadata. Values are redacted. | `id` |
+
+`openai_admin_api_key.value` is Sensitive and returned only during create. It is
+still stored in Terraform state; use a remote encrypted backend with restricted
+access. Configure at most one of `expires_in_seconds`, `expire_in_hours`, or
+`expire_in_days`; hours and days are converted to OpenAI's seconds-based create
+parameter.
+
+Destroy and replacement require OpenAI to confirm `deleted=true` for the
+requested admin key ID. If OpenAI does not confirm deletion, Terraform keeps the
+resource in state and reports a revoke failure.
+
+Guide: `docs/api-groups/admin-api-keys.md`.
+
+### Administration > Organization > Invites, Data Retention, Spend Limit, Spend Alerts, Certificates
+
+OpenAI hierarchy covered: Administration > Organization > Invites, Data
+Retention, Spend Limit, Spend Alerts, and Certificates. Use this group to
+manage organization-wide controls: pending invites, data retention, hard spend
+limits, spend-alert notifications, and certificates.
+
+| Terraform surface | Kind | Purpose | Import ID / Lookup |
+| --- | --- | --- | --- |
+| `openai_organization_invite` | Resource | Create and revoke organization invites with optional project grants. | `invite_123` |
+| `openai_organization_invites` / `openai_organization_invite` | Data sources | List or read organization invites. | `id` |
+| `openai_organization_data_retention` | Resource | Manage the organization data-retention mode. | `organization` |
+| `openai_organization_data_retention` | Data source | Read the current organization data-retention mode. | singleton |
+| `openai_organization_spend_limit` | Resource | Manage the organization hard monthly spend limit. | `organization` |
+| `openai_organization_spend_limit` | Data source | Read the current organization spend limit. | singleton |
+| `openai_organization_spend_alert` | Resource | Manage organization spend-alert email notifications. | `spend_alert_123` |
+| `openai_organization_spend_alerts` / `openai_organization_spend_alert` | Data sources | List or read organization spend alerts. | `id` |
+| `openai_organization_certificate` | Resource | Upload organization certificates and optionally activate them. | `cert_123` |
+| `openai_organization_certificates` / `openai_organization_certificate` | Data sources | List or read organization certificates. | `id` |
+
+Data retention and spend limit are singleton settings and use the synthetic ID
+`organization`. Data-retention destroy removes only Terraform state and emits a
+warning because OpenAI exposes retrieve/update but no delete/reset endpoint.
+Certificate destroy deactivates active certificates before deleting them.
+
+Guide: `docs/api-groups/organization-controls.md`.
+
+### Administration > Organization > Users
+
+OpenAI hierarchy covered: Administration > Organization > Users and Users >
+Roles. Use this group to discover accepted organization users before assigning
+groups or roles. Accepted users are data-source only in this provider version;
+pending invitations are managed by `openai_organization_invite`.
+
+| Terraform surface | Kind | Purpose | Lookup |
+| --- | --- | --- | --- |
+| `openai_organization_user` | Data source | Read a user by ID, including profile and project summary metadata. | `id` |
+| `openai_organization_users` | Data source | List users, optionally filtered by email addresses. | `emails`, `limit`, `after` |
+
+Guide: `docs/api-groups/organization-users.md`.
+
+### Administration > Organization > Groups
+
+OpenAI hierarchy covered: Administration > Organization > Groups, Groups >
+Users, and Groups > Roles. Use this group to manage organization groups,
+explicit group membership, and group role assignments.
+
+| Terraform surface | Kind | Purpose | Import ID / Lookup |
+| --- | --- | --- | --- |
+| `openai_organization_group` | Resource | Create and update organization groups. | `group_123` |
+| `openai_organization_groups` / `openai_organization_group` | Data sources | List or read organization groups. | `id` |
+| `openai_organization_group_user` | Resource | Add a user to a group. Destroy removes membership only. | `group_123/user_123` |
+| `openai_organization_group_users` / `openai_organization_group_user` | Data sources | List or read group members. | `group_id`, `user_id` |
+
+Guide: `docs/api-groups/organization-groups.md`.
+
+### Administration > Organization > Roles and Project Roles
+
+OpenAI hierarchy covered: Administration > Organization > Roles, Users > Roles,
+Groups > Roles, and Projects > Roles. Use this group to define
+organization/project custom roles and assign organization roles to users or
+groups.
+
+| Terraform surface | Kind | Purpose | Import ID / Lookup |
+| --- | --- | --- | --- |
+| `openai_organization_role` | Resource | Manage organization-scoped custom roles. | `role_123` |
+| `openai_organization_roles` / `openai_organization_role` | Data sources | List or read organization roles. | `id` |
+| `openai_project_role` | Resource | Manage project-scoped custom roles. | `proj_123/role_123` |
+| `openai_project_roles` / `openai_project_role` | Data sources | List or read project roles. | `project_id`, `id` |
+| `openai_organization_user_role` | Resource | Assign an organization role to a user. Destroy removes the assignment. | `user_123/role_123` |
+| `openai_organization_user_roles` / `openai_organization_user_role` | Data sources | List or read user role assignments. | `user_id`, `role_id` |
+| `openai_organization_group_role` | Resource | Assign an organization role to a group. Destroy removes the assignment. | `group_123/role_123` |
+| `openai_organization_group_roles` / `openai_organization_group_role` | Data sources | List or read group role assignments. | `group_id`, `role_id` |
+
+Guide: `docs/api-groups/roles-and-assignments.md`.
+
+## Common workflows by API group
+
+### Projects: bootstrap a project and issue service-account API keys
+
+```hcl
+resource "openai_project" "app" {
+  name            = "search-prod"
+  external_key_id = "cost-center-1234"
+}
+
+resource "openai_service_account" "app" {
+  project_id = openai_project.app.id
+  name       = "search-prod"
+  role       = "member"
+  scopes     = ["responses.read"]
+}
+
+output "service_account_api_key" {
+  value     = openai_service_account.app.api_key_value
+  sensitive = true
+}
+
+resource "openai_project_api_key" "worker" {
+  project_id         = openai_project.app.id
+  service_account_id = openai_service_account.app.id
+  name               = "search-prod-worker"
+  scopes             = ["responses.read", "models.read"]
+}
+
+output "worker_project_api_key" {
+  value     = openai_project_api_key.worker.value
+  sensitive = true
+}
+```
+
+### Admin API Keys: create automation credentials
+
+```hcl
+resource "openai_admin_api_key" "automation" {
+  name           = "terraform-admin-automation"
+  expire_in_days = 30
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+```
+
+Rotate automation credentials by creating a new `openai_admin_api_key` with a
+distinct name, storing the new `value` in your external secret manager or CI
+secret store, updating provider initialization to read the new key, running
+`terraform plan`, and then deliberately removing or destroying the old key. For
+critical keys, add `prevent_destroy` and remove that lifecycle protection only
+as part of an approved rotation change.
+
+### Organization Controls: govern invites, retention, spend, and certificates
+
+```hcl
+resource "openai_organization_invite" "platform_admin" {
+  email = "platform-admin@example.com"
+  role  = "owner"
+
+  projects = [{
+    id   = openai_project.app.id
+    role = "owner"
+  }]
+}
+
+resource "openai_organization_data_retention" "default" {
+  type = "modified_abuse_monitoring"
+}
+
+resource "openai_organization_spend_limit" "monthly" {
+  threshold_amount = 250000 # USD cents
+}
+
+resource "openai_organization_spend_alert" "eighty_percent" {
+  threshold_amount = 200000 # USD cents
+
+  notification_channel = {
+    recipients     = ["platform-finops@example.com"]
+    subject_prefix = "[OpenAI spend]"
+  }
+}
+
+resource "openai_organization_certificate" "egress_root" {
+  name        = "egress-root-ca"
+  certificate = file("${path.module}/egress-root-ca.pem")
+  active      = true
+}
+```
+
+### Organization Users and Groups: resolve users and manage membership
+
+```hcl
+data "openai_organization_user" "alice" {
+  id = "user_123"
+}
+
+resource "openai_organization_group" "engineering" {
+  name = "Engineering"
+}
+
+resource "openai_organization_group_user" "engineering_alice" {
+  group_id = openai_organization_group.engineering.id
+  user_id  = data.openai_organization_user.alice.id
+}
+```
+
+### Roles and Assignments: create roles and bind them to principals
+
+```hcl
+resource "openai_organization_role" "auditor" {
+  name        = "auditor"
+  description = "Read-only organization auditor"
+  permissions = [
+    "organization.users.read",
+  ]
+}
+
+resource "openai_organization_group_role" "engineering_auditor" {
+  group_id = openai_organization_group.engineering.id
+  role_id  = openai_organization_role.auditor.id
+}
+
+resource "openai_project_role" "api_key_reader" {
+  project_id  = openai_project.app.id
+  name        = "api-key-reader"
+  description = "Read project API keys"
+  permissions = [
+    "project.api_keys.read",
+  ]
+}
+```
+
+## Operational guidance
+
+- Prefer a short-lived bootstrap admin key stored in AWS Secrets Manager, GCP Secret Manager, or Azure Key Vault instead of committing direct credentials to Terraform variable files.
+- Keep generated OpenAI key values out of logs. Terraform marks them Sensitive, but state backends and plan artifacts still require access control.
+- Use remote encrypted state with state locking for shared administration.
+- Use provider aliases when managing multiple OpenAI organizations or bootstrap identities from the same root module.
+- Import existing projects, service accounts, roles, groups, and keys before letting Terraform manage them.
+- Keep accepted organization users managed outside this provider, then reference them with `openai_organization_user` or `openai_organization_users` data sources; use `openai_organization_invite` for pending invitations.
+- Review destructive plans carefully: project destroy archives projects, data-retention destroy is state-only, certificate destroy deactivates before delete, and key, invite, group, membership, role, role-assignment, spend-limit, spend-alert, and certificate destroys call the corresponding OpenAI delete/remove API.
+- Admin API key destroy/replacement requires OpenAI to confirm `deleted=true` for the requested key ID; otherwise Terraform keeps the resource in state and reports a revoke failure.
+
+Provider alias example:
+
+```hcl
+provider "openai" {
+  alias         = "prod"
+  admin_api_key = var.prod_openai_admin_api_key
+}
+
+provider "openai" {
+  alias         = "sandbox"
+  admin_api_key = var.sandbox_openai_admin_api_key
+}
+
+resource "openai_project" "prod_app" {
+  provider = openai.prod
+  name     = "search-prod"
+}
+```
+
+## Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| `missing OpenAI admin API key source` | Set `admin_api_key`, `OPENAI_ADMIN_KEY`/`OPENAI_ADMIN_API_KEY`, or exactly one secret-source block. |
+| `ambiguous OpenAI admin API key source` | Remove extra `aws_secrets_manager`, `gcp_secret_manager`, or `azure_key_vault` blocks/env discovery. |
+| AWS assume-role validation error | `role_session_name`, `external_id`, and `duration_seconds` require `role_arn`. Duration must be positive. |
+| GCP delegates validation error | `delegates` require `impersonate_service_account`. |
+| JSON secret error | Verify the payload is valid JSON, `json_key` has no empty path segment, and the selected key resolves to a non-empty string. |
+| Data source not found | Confirm the ID belongs to the expected organization/project and that the bootstrap admin key has permission to read it. |
