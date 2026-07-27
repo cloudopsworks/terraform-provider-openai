@@ -4,7 +4,7 @@ tags: ["terraform-provider", "openai", "admin-api", "service-accounts", "api-key
 created: 2026-07-27T17:44:39.545Z
 updated: 2026-07-27T17:44:39.545Z
 sources: []
-links: ["openai-provider-administration-round-1.md"]
+links: ["openai-provider-administration-round-1.md", "openai-provider-organization-controls-round-2026-07-27.md"]
 category: session-log
 confidence: medium
 schemaVersion: 1
@@ -40,6 +40,10 @@ schemaVersion: 1
 6. Treat local Terraform examples and state as high-risk. Stage only sanitized example files, never local CLI config or Terraform state artifacts.
 7. Keep examples type-correct. `expire_in_hours` and `expire_in_days` are numeric Terraform attributes, so examples should use numbers, not quoted strings.
 8. The next requested admin APIs (data retention, invites, spend limits/alerts, certificates, and project sub-API evaluation) should start with a read-only discovery pass over official OpenAI docs and the current Go SDK before adding resources.
+
+## Follow-up work
+
+The organization controls implementation is captured in [[openai-provider-organization-controls-round-2026-07-27]].
 
 ## Next work candidates
 

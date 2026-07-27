@@ -111,6 +111,139 @@ type AdminAPIKeyListResponse struct {
 	LastID  string
 }
 
+type InviteProject struct {
+	ID   string
+	Role string
+}
+
+type Invite struct {
+	ID         string
+	Email      string
+	Role       string
+	Status     string
+	Projects   []InviteProject
+	CreatedAt  int64
+	AcceptedAt int64
+	ExpiresAt  int64
+}
+
+type InviteCreateRequest struct {
+	Email    string
+	Role     string
+	Projects []InviteProject
+}
+
+type InviteListRequest struct {
+	After string
+	Limit int64
+}
+
+type InviteListResponse struct {
+	Items   []Invite
+	HasMore bool
+	LastID  string
+}
+
+type DataRetention struct {
+	ID   string
+	Type string
+}
+
+type DataRetentionUpdateRequest struct {
+	Type string
+}
+
+type SpendLimit struct {
+	ID                string
+	Currency          string
+	Interval          string
+	ThresholdAmount   int64
+	EnforcementStatus string
+}
+
+type SpendLimitUpdateRequest struct {
+	Currency        string
+	Interval        string
+	ThresholdAmount int64
+}
+
+type SpendAlertNotificationChannel struct {
+	Recipients    []string
+	Type          string
+	SubjectPrefix string
+}
+
+type SpendAlert struct {
+	ID                  string
+	Currency            string
+	Interval            string
+	ThresholdAmount     int64
+	NotificationChannel SpendAlertNotificationChannel
+}
+
+type SpendAlertCreateRequest struct {
+	Currency            string
+	Interval            string
+	ThresholdAmount     int64
+	NotificationChannel SpendAlertNotificationChannel
+}
+
+type SpendAlertUpdateRequest struct {
+	Currency            string
+	Interval            string
+	ThresholdAmount     int64
+	NotificationChannel SpendAlertNotificationChannel
+}
+
+type SpendAlertListRequest struct {
+	After  string
+	Before string
+	Limit  int64
+	Order  string
+}
+
+type SpendAlertListResponse struct {
+	Items   []SpendAlert
+	HasMore bool
+	LastID  string
+}
+
+type CertificateDetails struct {
+	Content   string
+	ExpiresAt int64
+	ValidAt   int64
+}
+
+type Certificate struct {
+	ID                 string
+	Name               string
+	Object             string
+	Active             bool
+	CertificateDetails CertificateDetails
+	CreatedAt          int64
+}
+
+type CertificateCreateRequest struct {
+	Name        string
+	Certificate string
+}
+
+type CertificateUpdateRequest struct {
+	Name string
+}
+
+type CertificateListRequest struct {
+	After string
+	Limit int64
+	Order string
+}
+
+type CertificateListResponse struct {
+	Items   []Certificate
+	HasMore bool
+	LastID  string
+}
+
 type ServiceAccountAPIKeyCreateRequest struct {
 	Name   string
 	Scopes []string
@@ -308,6 +441,31 @@ type AdminClient interface {
 	GetAdminAPIKey(ctx context.Context, id string) (*AdminAPIKey, error)
 	ListAdminAPIKeys(ctx context.Context, req AdminAPIKeyListRequest) (*AdminAPIKeyListResponse, error)
 	DeleteAdminAPIKey(ctx context.Context, id string) error
+
+	CreateInvite(ctx context.Context, req InviteCreateRequest) (*Invite, error)
+	GetInvite(ctx context.Context, id string) (*Invite, error)
+	ListInvites(ctx context.Context, req InviteListRequest) (*InviteListResponse, error)
+	DeleteInvite(ctx context.Context, id string) error
+
+	GetOrganizationDataRetention(ctx context.Context) (*DataRetention, error)
+	UpdateOrganizationDataRetention(ctx context.Context, req DataRetentionUpdateRequest) (*DataRetention, error)
+
+	GetOrganizationSpendLimit(ctx context.Context) (*SpendLimit, error)
+	UpdateOrganizationSpendLimit(ctx context.Context, req SpendLimitUpdateRequest) (*SpendLimit, error)
+	DeleteOrganizationSpendLimit(ctx context.Context) error
+
+	CreateOrganizationSpendAlert(ctx context.Context, req SpendAlertCreateRequest) (*SpendAlert, error)
+	GetOrganizationSpendAlert(ctx context.Context, id string) (*SpendAlert, error)
+	ListOrganizationSpendAlerts(ctx context.Context, req SpendAlertListRequest) (*SpendAlertListResponse, error)
+	UpdateOrganizationSpendAlert(ctx context.Context, id string, req SpendAlertUpdateRequest) (*SpendAlert, error)
+	DeleteOrganizationSpendAlert(ctx context.Context, id string) error
+
+	CreateOrganizationCertificate(ctx context.Context, req CertificateCreateRequest) (*Certificate, error)
+	GetOrganizationCertificate(ctx context.Context, id string, includeContent bool) (*Certificate, error)
+	ListOrganizationCertificates(ctx context.Context, req CertificateListRequest) (*CertificateListResponse, error)
+	UpdateOrganizationCertificate(ctx context.Context, id string, req CertificateUpdateRequest) (*Certificate, error)
+	SetOrganizationCertificatesActive(ctx context.Context, ids []string, active bool) ([]Certificate, error)
+	DeleteOrganizationCertificate(ctx context.Context, id string) error
 
 	GetOrganizationUser(ctx context.Context, userID string) (*OrganizationUser, error)
 	ListOrganizationUsers(ctx context.Context, req OrganizationUserListRequest) (*OrganizationUserListResponse, error)

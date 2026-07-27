@@ -1,8 +1,9 @@
 # Organization Users API group
 
 Use the Organization Users API group to discover existing users before managing
-group membership or role assignments. This provider exposes users as data sources
-only; it does not invite, create, or delete organization users.
+group membership or role assignments. This provider exposes accepted users as
+data sources only; invite lifecycle is managed by `openai_organization_invite`,
+and accepted-user deletion is not exposed in this provider version.
 
 ## Terraform surfaces
 
@@ -37,6 +38,7 @@ resource "openai_organization_user_role" "alice_auditor" {
 
 ## Operational notes
 
-- Keep user identity lifecycle outside this provider and import/reference users by stable ID.
+- Keep accepted-user identity lifecycle outside this provider and import/reference users by stable ID.
+- Use `openai_organization_invite` from the Organization Controls group for pending-user invitations.
 - Prefer group-based assignments when multiple users need the same organization role.
 - Destroying `openai_organization_user_role` removes only the role assignment; it does not delete the user.

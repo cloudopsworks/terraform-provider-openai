@@ -255,11 +255,36 @@ resource in state and reports a revoke failure.
 
 Guide: `docs/api-groups/admin-api-keys.md`.
 
+### Organization Controls API group
+
+Use this group to manage organization-wide controls: pending invites, data
+retention, hard spend limits, spend-alert notifications, and certificates.
+
+| Terraform surface | Kind | Purpose | Import ID / Lookup |
+| --- | --- | --- | --- |
+| `openai_organization_invite` | Resource | Create and revoke organization invites with optional project grants. | `invite_123` |
+| `openai_organization_invites` / `openai_organization_invite` | Data sources | List or read organization invites. | `id` |
+| `openai_organization_data_retention` | Resource | Manage the organization data-retention mode. | `organization` |
+| `openai_organization_data_retention` | Data source | Read the current organization data-retention mode. | singleton |
+| `openai_organization_spend_limit` | Resource | Manage the organization hard monthly spend limit. | `organization` |
+| `openai_organization_spend_limit` | Data source | Read the current organization spend limit. | singleton |
+| `openai_organization_spend_alert` | Resource | Manage organization spend-alert email notifications. | `spend_alert_123` |
+| `openai_organization_spend_alerts` / `openai_organization_spend_alert` | Data sources | List or read organization spend alerts. | `id` |
+| `openai_organization_certificate` | Resource | Upload organization certificates and optionally activate them. | `cert_123` |
+| `openai_organization_certificates` / `openai_organization_certificate` | Data sources | List or read organization certificates. | `id` |
+
+Data retention and spend limit are singleton settings and use the synthetic ID
+`organization`. Data-retention destroy removes only Terraform state and emits a
+warning because OpenAI exposes retrieve/update but no delete/reset endpoint.
+Certificate destroy deactivates active certificates before deleting them.
+
+Guide: `docs/api-groups/organization-controls.md`.
+
 ### Organization Users API group
 
-Use this group to discover existing organization users before assigning groups
-or roles. Users are data-source only in this provider version; invite and user
-lifecycle management stays outside Terraform here.
+Use this group to discover accepted organization users before assigning groups
+or roles. Accepted users are data-source only in this provider version; pending
+invitations are managed by `openai_organization_invite`.
 
 | Terraform surface | Kind | Purpose | Lookup |
 | --- | --- | --- | --- |
@@ -354,6 +379,43 @@ secret store, updating provider initialization to read the new key, running
 critical keys, add `prevent_destroy` and remove that lifecycle protection only
 as part of an approved rotation change.
 
+### Organization Controls: govern invites, retention, spend, and certificates
+
+```hcl
+resource "openai_organization_invite" "platform_admin" {
+  email = "platform-admin@example.com"
+  role  = "owner"
+
+  projects = [{
+    id   = openai_project.app.id
+    role = "owner"
+  }]
+}
+
+resource "openai_organization_data_retention" "default" {
+  type = "modified_abuse_monitoring"
+}
+
+resource "openai_organization_spend_limit" "monthly" {
+  threshold_amount = 250000 # USD cents
+}
+
+resource "openai_organization_spend_alert" "eighty_percent" {
+  threshold_amount = 200000 # USD cents
+
+  notification_channel = {
+    recipients     = ["platform-finops@example.com"]
+    subject_prefix = "[OpenAI spend]"
+  }
+}
+
+resource "openai_organization_certificate" "egress_root" {
+  name        = "egress-root-ca"
+  certificate = file("${path.module}/egress-root-ca.pem")
+  active      = true
+}
+```
+
 ### Organization Users and Groups: resolve users and manage membership
 
 ```hcl
@@ -404,8 +466,8 @@ resource "openai_project_role" "api_key_reader" {
 - Use remote encrypted state with state locking for shared administration.
 - Use provider aliases when managing multiple OpenAI organizations or bootstrap identities from the same root module.
 - Import existing projects, service accounts, roles, groups, and keys before letting Terraform manage them.
-- Keep organization users managed outside this provider, then reference them with `openai_organization_user` or `openai_organization_users` data sources.
-- Review destructive plans carefully: project destroy archives projects, while key, group, membership, role, and role-assignment destroys call the corresponding OpenAI delete/remove API.
+- Keep accepted organization users managed outside this provider, then reference them with `openai_organization_user` or `openai_organization_users` data sources; use `openai_organization_invite` for pending invitations.
+- Review destructive plans carefully: project destroy archives projects, data-retention destroy is state-only, certificate destroy deactivates before delete, and key, invite, group, membership, role, role-assignment, spend-limit, spend-alert, and certificate destroys call the corresponding OpenAI delete/remove API.
 - Admin API key destroy/replacement requires OpenAI to confirm `deleted=true` for the requested key ID; otherwise Terraform keeps the resource in state and reports a revoke failure.
 
 Provider alias example:

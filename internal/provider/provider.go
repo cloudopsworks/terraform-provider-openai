@@ -228,6 +228,11 @@ func (p *openAIProvider) Resources(_ context.Context) []func() resource.Resource
 		NewOrganizationUserRoleResource,
 		NewOrganizationGroupRoleResource,
 		NewProjectRoleResource,
+		NewOrganizationInviteResource,
+		NewOrganizationDataRetentionResource,
+		NewOrganizationSpendLimitResource,
+		NewOrganizationSpendAlertResource,
+		NewOrganizationCertificateResource,
 	}
 }
 
@@ -253,6 +258,14 @@ func (p *openAIProvider) DataSources(_ context.Context) []func() datasource.Data
 		NewOrganizationGroupRolesDataSource,
 		NewProjectRoleDataSource,
 		NewProjectRolesDataSource,
+		NewOrganizationInviteDataSource,
+		NewOrganizationInvitesDataSource,
+		NewOrganizationDataRetentionDataSource,
+		NewOrganizationSpendLimitDataSource,
+		NewOrganizationSpendAlertDataSource,
+		NewOrganizationSpendAlertsDataSource,
+		NewOrganizationCertificateDataSource,
+		NewOrganizationCertificatesDataSource,
 	}
 }
 

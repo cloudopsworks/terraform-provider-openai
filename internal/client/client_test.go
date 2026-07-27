@@ -703,3 +703,283 @@ func roleAssignmentJSON(id, name, resourceType string) map[string]any {
 	body["metadata"] = map[string]any{}
 	return body
 }
+
+func TestOpenAIAdminClientOrganizationInviteLifecycle(t *testing.T) {
+	cl := testClient(func(r *http.Request) (*http.Response, error) {
+		switch r.Method + " " + r.URL.Path {
+		case "POST /organization/invites":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["email"] != "new-user@example.com" || body["role"] != "reader" {
+				t.Fatalf("unexpected invite create body: %#v", body)
+			}
+			projects, ok := body["projects"].([]any)
+			if !ok || len(projects) != 1 || projects[0].(map[string]any)["id"] != "proj_1" || projects[0].(map[string]any)["role"] != "member" {
+				t.Fatalf("unexpected invite projects: %#v", body["projects"])
+			}
+			return jsonResponse(inviteJSON("invite_1")), nil
+		case "GET /organization/invites/invite_1":
+			return jsonResponse(inviteJSON("invite_1")), nil
+		case "GET /organization/invites":
+			if got := r.URL.Query().Get("after"); got != "invite_0" {
+				t.Fatalf("after query = %q", got)
+			}
+			if got := r.URL.Query().Get("limit"); got != "2" {
+				t.Fatalf("limit query = %q", got)
+			}
+			return jsonResponse(map[string]any{"data": []map[string]any{inviteJSON("invite_1")}, "has_more": false, "last_id": "invite_1"}), nil
+		case "DELETE /organization/invites/invite_1":
+			return jsonResponse(map[string]any{"id": "invite_1", "deleted": true}), nil
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		return nil, nil
+	})
+
+	created, err := cl.CreateInvite(context.Background(), InviteCreateRequest{Email: "new-user@example.com", Role: "reader", Projects: []InviteProject{{ID: "proj_1", Role: "member"}}})
+	if err != nil || created.ID != "invite_1" || created.Projects[0].ID != "proj_1" {
+		t.Fatalf("CreateInvite() = %#v, %v", created, err)
+	}
+	if got, err := cl.GetInvite(context.Background(), "invite_1"); err != nil || got.Status != "pending" {
+		t.Fatalf("GetInvite() = %#v, %v", got, err)
+	}
+	list, err := cl.ListInvites(context.Background(), InviteListRequest{After: "invite_0", Limit: 2})
+	if err != nil || len(list.Items) != 1 || list.LastID != "invite_1" {
+		t.Fatalf("ListInvites() = %#v, %v", list, err)
+	}
+	if err := cl.DeleteInvite(context.Background(), "invite_1"); err != nil {
+		t.Fatalf("DeleteInvite() = %v", err)
+	}
+}
+
+func TestOpenAIAdminClientOrganizationDataRetentionAndSpendLimit(t *testing.T) {
+	cl := testClient(func(r *http.Request) (*http.Response, error) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /organization/data_retention":
+			return jsonResponse(map[string]any{"object": "organization.data_retention", "type": "modified_abuse_monitoring"}), nil
+		case "POST /organization/data_retention":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["retention_type"] != "zero_data_retention" {
+				t.Fatalf("unexpected data retention body: %#v", body)
+			}
+			return jsonResponse(map[string]any{"object": "organization.data_retention", "type": "zero_data_retention"}), nil
+		case "GET /organization/spend_limit":
+			return jsonResponse(map[string]any{"object": "organization.spend_limit", "threshold_amount": 10000, "currency": "USD", "interval": "month", "enforcement": map[string]any{"status": "enforcing"}}), nil
+		case "POST /organization/spend_limit":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["threshold_amount"] != float64(20000) || body["currency"] != "USD" || body["interval"] != "month" {
+				t.Fatalf("unexpected spend limit body: %#v", body)
+			}
+			return jsonResponse(map[string]any{"object": "organization.spend_limit", "threshold_amount": 20000, "currency": "USD", "interval": "month", "enforcement": map[string]any{"status": "enforcing"}}), nil
+		case "DELETE /organization/spend_limit":
+			return jsonResponse(map[string]any{"object": "organization.spend_limit.deleted", "deleted": true}), nil
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		return nil, nil
+	})
+
+	retention, err := cl.GetOrganizationDataRetention(context.Background())
+	if err != nil || retention.Type != "modified_abuse_monitoring" {
+		t.Fatalf("GetOrganizationDataRetention() = %#v, %v", retention, err)
+	}
+	retention, err = cl.UpdateOrganizationDataRetention(context.Background(), DataRetentionUpdateRequest{Type: "zero_data_retention"})
+	if err != nil || retention.Type != "zero_data_retention" {
+		t.Fatalf("UpdateOrganizationDataRetention() = %#v, %v", retention, err)
+	}
+	limit, err := cl.GetOrganizationSpendLimit(context.Background())
+	if err != nil || limit.ThresholdAmount != 10000 || limit.EnforcementStatus != "enforcing" {
+		t.Fatalf("GetOrganizationSpendLimit() = %#v, %v", limit, err)
+	}
+	limit, err = cl.UpdateOrganizationSpendLimit(context.Background(), SpendLimitUpdateRequest{ThresholdAmount: 20000})
+	if err != nil || limit.ThresholdAmount != 20000 || limit.Currency != "USD" {
+		t.Fatalf("UpdateOrganizationSpendLimit() = %#v, %v", limit, err)
+	}
+	if err := cl.DeleteOrganizationSpendLimit(context.Background()); err != nil {
+		t.Fatalf("DeleteOrganizationSpendLimit() = %v", err)
+	}
+}
+
+func TestOpenAIAdminClientOrganizationSpendAlertLifecycle(t *testing.T) {
+	cl := testClient(func(r *http.Request) (*http.Response, error) {
+		switch r.Method + " " + r.URL.Path {
+		case "POST /organization/spend_alerts":
+			assertSpendAlertBody(t, r, 10000)
+			return jsonResponse(spendAlertJSON("alert_1", 10000)), nil
+		case "GET /organization/spend_alerts/alert_1":
+			return jsonResponse(spendAlertJSON("alert_1", 10000)), nil
+		case "GET /organization/spend_alerts":
+			if got := r.URL.Query().Get("after"); got != "alert_0" {
+				t.Fatalf("after query = %q", got)
+			}
+			if got := r.URL.Query().Get("before"); got != "alert_2" {
+				t.Fatalf("before query = %q", got)
+			}
+			if got := r.URL.Query().Get("limit"); got != "2" {
+				t.Fatalf("limit query = %q", got)
+			}
+			if got := r.URL.Query().Get("order"); got != "desc" {
+				t.Fatalf("order query = %q", got)
+			}
+			return jsonResponse(map[string]any{"data": []map[string]any{spendAlertJSON("alert_1", 10000)}, "has_more": false, "last_id": "alert_1"}), nil
+		case "POST /organization/spend_alerts/alert_1":
+			assertSpendAlertBody(t, r, 20000)
+			return jsonResponse(spendAlertJSON("alert_1", 20000)), nil
+		case "DELETE /organization/spend_alerts/alert_1":
+			return jsonResponse(map[string]any{"id": "alert_1", "deleted": true, "object": "organization.spend_alert.deleted"}), nil
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		return nil, nil
+	})
+
+	channel := SpendAlertNotificationChannel{Recipients: []string{"finops@example.com"}, SubjectPrefix: "OpenAI"}
+	created, err := cl.CreateOrganizationSpendAlert(context.Background(), SpendAlertCreateRequest{ThresholdAmount: 10000, NotificationChannel: channel})
+	if err != nil || created.ID != "alert_1" || created.NotificationChannel.SubjectPrefix != "OpenAI" {
+		t.Fatalf("CreateOrganizationSpendAlert() = %#v, %v", created, err)
+	}
+	if got, err := cl.GetOrganizationSpendAlert(context.Background(), "alert_1"); err != nil || got.Currency != "USD" {
+		t.Fatalf("GetOrganizationSpendAlert() = %#v, %v", got, err)
+	}
+	list, err := cl.ListOrganizationSpendAlerts(context.Background(), SpendAlertListRequest{After: "alert_0", Before: "alert_2", Limit: 2, Order: "desc"})
+	if err != nil || len(list.Items) != 1 || list.LastID != "alert_1" {
+		t.Fatalf("ListOrganizationSpendAlerts() = %#v, %v", list, err)
+	}
+	updated, err := cl.UpdateOrganizationSpendAlert(context.Background(), "alert_1", SpendAlertUpdateRequest{ThresholdAmount: 20000, NotificationChannel: channel})
+	if err != nil || updated.ThresholdAmount != 20000 {
+		t.Fatalf("UpdateOrganizationSpendAlert() = %#v, %v", updated, err)
+	}
+	if err := cl.DeleteOrganizationSpendAlert(context.Background(), "alert_1"); err != nil {
+		t.Fatalf("DeleteOrganizationSpendAlert() = %v", err)
+	}
+}
+
+func TestOpenAIAdminClientOrganizationCertificateLifecycle(t *testing.T) {
+	cl := testClient(func(r *http.Request) (*http.Response, error) {
+		switch r.Method + " " + r.URL.Path {
+		case "POST /organization/certificates":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["name"] != "gateway" || body["certificate"] != "pem" {
+				t.Fatalf("unexpected certificate create body: %#v", body)
+			}
+			return jsonResponse(certificateJSON("cert_1", "certificate", false, true)), nil
+		case "GET /organization/certificates/cert_1":
+			if got := r.URL.Query()["include[]"]; len(got) == 1 && got[0] != "content" {
+				t.Fatalf("unexpected include query: %#v", got)
+			}
+			includeContent := len(r.URL.Query()["include[]"]) == 1
+			return jsonResponse(certificateJSON("cert_1", "certificate", false, includeContent)), nil
+		case "GET /organization/certificates":
+			if got := r.URL.Query().Get("limit"); got != "100" && got != "2" {
+				t.Fatalf("limit query = %q", got)
+			}
+			return jsonResponse(map[string]any{"data": []map[string]any{certificateJSON("cert_1", "organization.certificate", true, false)}, "has_more": false, "last_id": "cert_1"}), nil
+		case "POST /organization/certificates/cert_1":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["name"] != "gateway-2" {
+				t.Fatalf("unexpected certificate update body: %#v", body)
+			}
+			return jsonResponse(certificateJSON("cert_1", "certificate", false, false)), nil
+		case "POST /organization/certificates/activate":
+			assertCertificateIDs(t, r, "cert_1")
+			return jsonResponse(map[string]any{"data": []map[string]any{certificateJSON("cert_1", "organization.certificate", true, false)}}), nil
+		case "POST /organization/certificates/deactivate":
+			assertCertificateIDs(t, r, "cert_1")
+			return jsonResponse(map[string]any{"data": []map[string]any{certificateJSON("cert_1", "organization.certificate", false, false)}}), nil
+		case "DELETE /organization/certificates/cert_1":
+			return jsonResponse(map[string]any{"id": "cert_1", "object": "certificate.deleted"}), nil
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		return nil, nil
+	})
+
+	created, err := cl.CreateOrganizationCertificate(context.Background(), CertificateCreateRequest{Name: "gateway", Certificate: "pem"})
+	if err != nil || created.ID != "cert_1" || created.CertificateDetails.Content != "pem" {
+		t.Fatalf("CreateOrganizationCertificate() = %#v, %v", created, err)
+	}
+	got, err := cl.GetOrganizationCertificate(context.Background(), "cert_1", true)
+	if err != nil || !got.Active || got.CertificateDetails.Content != "pem" {
+		t.Fatalf("GetOrganizationCertificate() = %#v, %v", got, err)
+	}
+	list, err := cl.ListOrganizationCertificates(context.Background(), CertificateListRequest{Limit: 2})
+	if err != nil || len(list.Items) != 1 || !list.Items[0].Active {
+		t.Fatalf("ListOrganizationCertificates() = %#v, %v", list, err)
+	}
+	updated, err := cl.UpdateOrganizationCertificate(context.Background(), "cert_1", CertificateUpdateRequest{Name: "gateway-2"})
+	if err != nil || !updated.Active {
+		t.Fatalf("UpdateOrganizationCertificate() = %#v, %v", updated, err)
+	}
+	activated, err := cl.SetOrganizationCertificatesActive(context.Background(), []string{"cert_1"}, true)
+	if err != nil || len(activated) != 1 || !activated[0].Active {
+		t.Fatalf("Activate certificates = %#v, %v", activated, err)
+	}
+	deactivated, err := cl.SetOrganizationCertificatesActive(context.Background(), []string{"cert_1"}, false)
+	if err != nil || len(deactivated) != 1 || deactivated[0].Active {
+		t.Fatalf("Deactivate certificates = %#v, %v", deactivated, err)
+	}
+	if err := cl.DeleteOrganizationCertificate(context.Background(), "cert_1"); err != nil {
+		t.Fatalf("DeleteOrganizationCertificate() = %v", err)
+	}
+}
+
+func inviteJSON(id string) map[string]any {
+	return map[string]any{"id": id, "email": "new-user@example.com", "role": "reader", "status": "pending", "created_at": 31, "expires_at": 41, "projects": []map[string]any{{"id": "proj_1", "role": "member"}}}
+}
+
+func spendAlertJSON(id string, threshold int64) map[string]any {
+	return map[string]any{"id": id, "currency": "USD", "interval": "month", "threshold_amount": threshold, "object": "organization.spend_alert", "notification_channel": map[string]any{"type": "email", "recipients": []string{"finops@example.com"}, "subject_prefix": "OpenAI"}}
+}
+
+func assertSpendAlertBody(t *testing.T, r *http.Request, threshold int64) {
+	t.Helper()
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["threshold_amount"] != float64(threshold) || body["currency"] != "USD" || body["interval"] != "month" {
+		t.Fatalf("unexpected spend alert body: %#v", body)
+	}
+	channel, ok := body["notification_channel"].(map[string]any)
+	if !ok || channel["type"] != "email" || channel["subject_prefix"] != "OpenAI" {
+		t.Fatalf("unexpected notification channel: %#v", body["notification_channel"])
+	}
+	recipients, ok := channel["recipients"].([]any)
+	if !ok || len(recipients) != 1 || recipients[0] != "finops@example.com" {
+		t.Fatalf("unexpected notification recipients: %#v", channel["recipients"])
+	}
+}
+
+func certificateJSON(id, object string, active bool, includeContent bool) map[string]any {
+	details := map[string]any{"expires_at": 61, "valid_at": 52}
+	if includeContent {
+		details["content"] = "pem"
+	}
+	return map[string]any{"id": id, "name": "gateway", "object": object, "active": active, "created_at": 51, "certificate_details": details}
+}
+
+func assertCertificateIDs(t *testing.T, r *http.Request, want string) {
+	t.Helper()
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	ids, ok := body["certificate_ids"].([]any)
+	if !ok || len(ids) != 1 || ids[0] != want {
+		t.Fatalf("unexpected certificate IDs body: %#v", body)
+	}
+}

@@ -49,6 +49,29 @@ type fakeAdminClient struct {
 	deletedKey              string
 	createdAdminAPIKeyReq   client.AdminAPIKeyCreateRequest
 	deletedAdminAPIKey      string
+	invite                  *client.Invite
+	invites                 []client.Invite
+	createdInviteReq        client.InviteCreateRequest
+	deletedInvite           string
+	dataRetention           *client.DataRetention
+	updatedDataRetentionReq client.DataRetentionUpdateRequest
+	spendLimit              *client.SpendLimit
+	updatedSpendLimitReq    client.SpendLimitUpdateRequest
+	deletedSpendLimit       bool
+	spendAlert              *client.SpendAlert
+	spendAlerts             []client.SpendAlert
+	createdSpendAlertReq    client.SpendAlertCreateRequest
+	updatedSpendAlertID     string
+	updatedSpendAlertReq    client.SpendAlertUpdateRequest
+	deletedSpendAlert       string
+	certificate             *client.Certificate
+	certificates            []client.Certificate
+	createdCertificateReq   client.CertificateCreateRequest
+	updatedCertificateID    string
+	updatedCertificateReq   client.CertificateUpdateRequest
+	activatedCertificates   []string
+	deactivatedCertificates []string
+	deletedCertificate      string
 	err                     error
 }
 
@@ -220,6 +243,213 @@ func (f *fakeAdminClient) ListAdminAPIKeys(ctx context.Context, req client.Admin
 func (f *fakeAdminClient) DeleteAdminAPIKey(ctx context.Context, id string) error {
 	f.deletedAdminAPIKey = id
 	return f.err
+}
+func (f *fakeAdminClient) CreateInvite(ctx context.Context, req client.InviteCreateRequest) (*client.Invite, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.createdInviteReq = req
+	f.invite = &client.Invite{ID: "invite_1", Email: req.Email, Role: req.Role, Status: "pending", Projects: req.Projects, CreatedAt: 31, ExpiresAt: 41}
+	return f.invite, nil
+}
+func (f *fakeAdminClient) GetInvite(ctx context.Context, id string) (*client.Invite, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.invite != nil && f.invite.ID == id {
+		return f.invite, nil
+	}
+	for i := range f.invites {
+		if f.invites[i].ID == id {
+			return &f.invites[i], nil
+		}
+	}
+	return &client.Invite{ID: id, Email: "user@example.com", Role: "reader", Status: "pending", CreatedAt: 31, ExpiresAt: 41}, nil
+}
+func (f *fakeAdminClient) ListInvites(ctx context.Context, req client.InviteListRequest) (*client.InviteListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	invites := append([]client.Invite(nil), f.invites...)
+	if len(invites) == 0 && f.invite != nil {
+		invites = append(invites, *f.invite)
+	}
+	if len(invites) == 0 {
+		invites = []client.Invite{{ID: "invite_1", Email: "user@example.com", Role: "reader", Status: "pending", CreatedAt: 31}}
+	}
+	return &client.InviteListResponse{Items: invites, LastID: invites[len(invites)-1].ID}, nil
+}
+func (f *fakeAdminClient) DeleteInvite(ctx context.Context, id string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.deletedInvite = id
+	return nil
+}
+func (f *fakeAdminClient) GetOrganizationDataRetention(ctx context.Context) (*client.DataRetention, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.dataRetention != nil {
+		return f.dataRetention, nil
+	}
+	return &client.DataRetention{ID: "organization", Type: "modified_abuse_monitoring"}, nil
+}
+func (f *fakeAdminClient) UpdateOrganizationDataRetention(ctx context.Context, req client.DataRetentionUpdateRequest) (*client.DataRetention, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.updatedDataRetentionReq = req
+	f.dataRetention = &client.DataRetention{ID: "organization", Type: req.Type}
+	return f.dataRetention, nil
+}
+func (f *fakeAdminClient) GetOrganizationSpendLimit(ctx context.Context) (*client.SpendLimit, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.spendLimit != nil {
+		return f.spendLimit, nil
+	}
+	return &client.SpendLimit{ID: "organization", ThresholdAmount: 10000, Currency: "USD", Interval: "month", EnforcementStatus: "enforcing"}, nil
+}
+func (f *fakeAdminClient) UpdateOrganizationSpendLimit(ctx context.Context, req client.SpendLimitUpdateRequest) (*client.SpendLimit, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.updatedSpendLimitReq = req
+	f.spendLimit = &client.SpendLimit{ID: "organization", ThresholdAmount: req.ThresholdAmount, Currency: req.Currency, Interval: req.Interval, EnforcementStatus: "enforcing"}
+	return f.spendLimit, nil
+}
+func (f *fakeAdminClient) DeleteOrganizationSpendLimit(ctx context.Context) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.deletedSpendLimit = true
+	return nil
+}
+func (f *fakeAdminClient) CreateOrganizationSpendAlert(ctx context.Context, req client.SpendAlertCreateRequest) (*client.SpendAlert, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.createdSpendAlertReq = req
+	f.spendAlert = &client.SpendAlert{ID: "alert_1", ThresholdAmount: req.ThresholdAmount, Currency: req.Currency, Interval: req.Interval, NotificationChannel: req.NotificationChannel}
+	return f.spendAlert, nil
+}
+func (f *fakeAdminClient) GetOrganizationSpendAlert(ctx context.Context, id string) (*client.SpendAlert, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.spendAlert != nil && f.spendAlert.ID == id {
+		return f.spendAlert, nil
+	}
+	for i := range f.spendAlerts {
+		if f.spendAlerts[i].ID == id {
+			return &f.spendAlerts[i], nil
+		}
+	}
+	return &client.SpendAlert{ID: id, ThresholdAmount: 5000, Currency: "USD", Interval: "month", NotificationChannel: client.SpendAlertNotificationChannel{Recipients: []string{"finops@example.com"}, Type: "email"}}, nil
+}
+func (f *fakeAdminClient) ListOrganizationSpendAlerts(ctx context.Context, req client.SpendAlertListRequest) (*client.SpendAlertListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	alerts := append([]client.SpendAlert(nil), f.spendAlerts...)
+	if len(alerts) == 0 && f.spendAlert != nil {
+		alerts = append(alerts, *f.spendAlert)
+	}
+	if len(alerts) == 0 {
+		alerts = []client.SpendAlert{{ID: "alert_1", ThresholdAmount: 5000, Currency: "USD", Interval: "month", NotificationChannel: client.SpendAlertNotificationChannel{Recipients: []string{"finops@example.com"}, Type: "email"}}}
+	}
+	return &client.SpendAlertListResponse{Items: alerts, LastID: alerts[len(alerts)-1].ID}, nil
+}
+func (f *fakeAdminClient) UpdateOrganizationSpendAlert(ctx context.Context, id string, req client.SpendAlertUpdateRequest) (*client.SpendAlert, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.updatedSpendAlertID = id
+	f.updatedSpendAlertReq = req
+	f.spendAlert = &client.SpendAlert{ID: id, ThresholdAmount: req.ThresholdAmount, Currency: req.Currency, Interval: req.Interval, NotificationChannel: req.NotificationChannel}
+	return f.spendAlert, nil
+}
+func (f *fakeAdminClient) DeleteOrganizationSpendAlert(ctx context.Context, id string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.deletedSpendAlert = id
+	return nil
+}
+func (f *fakeAdminClient) CreateOrganizationCertificate(ctx context.Context, req client.CertificateCreateRequest) (*client.Certificate, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.createdCertificateReq = req
+	f.certificate = &client.Certificate{ID: "cert_1", Name: req.Name, Object: "certificate", CreatedAt: 51, CertificateDetails: client.CertificateDetails{ExpiresAt: 61, ValidAt: 52}}
+	return f.certificate, nil
+}
+func (f *fakeAdminClient) GetOrganizationCertificate(ctx context.Context, id string, includeContent bool) (*client.Certificate, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.certificate != nil && f.certificate.ID == id {
+		return f.certificate, nil
+	}
+	for i := range f.certificates {
+		if f.certificates[i].ID == id {
+			return &f.certificates[i], nil
+		}
+	}
+	content := ""
+	if includeContent {
+		content = "-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----"
+	}
+	return &client.Certificate{ID: id, Name: "Certificate", Object: "certificate", Active: false, CreatedAt: 51, CertificateDetails: client.CertificateDetails{Content: content, ExpiresAt: 61, ValidAt: 52}}, nil
+}
+func (f *fakeAdminClient) ListOrganizationCertificates(ctx context.Context, req client.CertificateListRequest) (*client.CertificateListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	certificates := append([]client.Certificate(nil), f.certificates...)
+	if len(certificates) == 0 && f.certificate != nil {
+		certificates = append(certificates, *f.certificate)
+	}
+	if len(certificates) == 0 {
+		certificates = []client.Certificate{{ID: "cert_1", Name: "Certificate", Object: "organization.certificate", Active: true, CreatedAt: 51, CertificateDetails: client.CertificateDetails{ExpiresAt: 61, ValidAt: 52}}}
+	}
+	return &client.CertificateListResponse{Items: certificates, LastID: certificates[len(certificates)-1].ID}, nil
+}
+func (f *fakeAdminClient) UpdateOrganizationCertificate(ctx context.Context, id string, req client.CertificateUpdateRequest) (*client.Certificate, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.updatedCertificateID = id
+	f.updatedCertificateReq = req
+	f.certificate = &client.Certificate{ID: id, Name: req.Name, Object: "certificate", Active: false, CreatedAt: 51, CertificateDetails: client.CertificateDetails{ExpiresAt: 61, ValidAt: 52}}
+	return f.certificate, nil
+}
+func (f *fakeAdminClient) SetOrganizationCertificatesActive(ctx context.Context, ids []string, active bool) ([]client.Certificate, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if active {
+		f.activatedCertificates = append([]string(nil), ids...)
+	} else {
+		f.deactivatedCertificates = append([]string(nil), ids...)
+	}
+	certificates := make([]client.Certificate, 0, len(ids))
+	for _, id := range ids {
+		certificates = append(certificates, client.Certificate{ID: id, Name: "Certificate", Object: "organization.certificate", Active: active, CreatedAt: 51, CertificateDetails: client.CertificateDetails{ExpiresAt: 61, ValidAt: 52}})
+	}
+	if f.certificate != nil && len(ids) > 0 && f.certificate.ID == ids[0] {
+		f.certificate.Active = active
+	}
+	return certificates, nil
+}
+func (f *fakeAdminClient) DeleteOrganizationCertificate(ctx context.Context, id string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.deletedCertificate = id
+	return nil
 }
 func (f *fakeAdminClient) GetOrganizationUser(ctx context.Context, userID string) (*client.OrganizationUser, error) {
 	if f.err != nil {
@@ -1483,5 +1713,198 @@ func TestOrganizationAccessResourcesWithMockClient(t *testing.T) {
 	}
 	if projectRoleState.ResourceType.ValueString() != "api.project" {
 		t.Fatalf("unexpected project role state: %#v", projectRoleState)
+	}
+}
+
+func TestOrganizationInviteResourceAndDataSourcesWithMockClient(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeAdminClient{}
+	r := &organizationInviteResource{client: fake}
+	schema := resourceSchema(ctx, t, r)
+	plan := tfsdk.Plan{Schema: schema}
+	if diags := plan.Set(ctx, &organizationInviteResourceModel{Email: types.StringValue("new-user@example.com"), Role: types.StringValue("reader"), Projects: []inviteProjectModel{{ID: types.StringValue("proj_1"), Role: types.StringValue("member")}}}); diags.HasError() {
+		t.Fatalf("plan set: %v", diags)
+	}
+	createResp := resource.CreateResponse{State: tfsdk.State{Schema: schema}}
+	r.Create(ctx, resource.CreateRequest{Plan: plan}, &createResp)
+	if createResp.Diagnostics.HasError() {
+		t.Fatalf("create diagnostics: %v", createResp.Diagnostics)
+	}
+	if fake.createdInviteReq.Email != "new-user@example.com" || len(fake.createdInviteReq.Projects) != 1 || fake.createdInviteReq.Projects[0].Role != "member" {
+		t.Fatalf("unexpected invite request: %#v", fake.createdInviteReq)
+	}
+	var state organizationInviteResourceModel
+	if diags := createResp.State.Get(ctx, &state); diags.HasError() {
+		t.Fatalf("state get: %v", diags)
+	}
+	if state.ID.ValueString() != "invite_1" || state.Status.ValueString() != "pending" || state.ExpiresAt.ValueInt64() != 41 {
+		t.Fatalf("unexpected invite state: %#v", state)
+	}
+	deleteResp := resource.DeleteResponse{State: createResp.State}
+	r.Delete(ctx, resource.DeleteRequest{State: createResp.State}, &deleteResp)
+	if deleteResp.Diagnostics.HasError() || fake.deletedInvite != "invite_1" {
+		t.Fatalf("delete diagnostics=%v deleted=%q", deleteResp.Diagnostics, fake.deletedInvite)
+	}
+
+	fake.invites = []client.Invite{{ID: "invite_2", Email: "member@example.com", Role: "owner", Status: "pending", Projects: []client.InviteProject{{ID: "proj_2", Role: "owner"}}, CreatedAt: 32}}
+	listDS := &organizationInvitesDataSource{client: fake}
+	listSchema := dataSourceSchema(ctx, t, listDS)
+	listPlan := tfsdk.Plan{Schema: listSchema}
+	if diags := listPlan.Set(ctx, &organizationInvitesDataSourceModel{After: types.StringValue("invite_1"), Limit: types.Int64Value(1)}); diags.HasError() {
+		t.Fatalf("list config set: %v", diags)
+	}
+	listResp := datasource.ReadResponse{State: tfsdk.State{Schema: listSchema}}
+	listDS.Read(ctx, datasource.ReadRequest{Config: tfsdk.Config{Schema: listSchema, Raw: listPlan.Raw}}, &listResp)
+	if listResp.Diagnostics.HasError() {
+		t.Fatalf("list diagnostics: %v", listResp.Diagnostics)
+	}
+	var listState organizationInvitesDataSourceModel
+	if diags := listResp.State.Get(ctx, &listState); diags.HasError() {
+		t.Fatalf("list state get: %v", diags)
+	}
+	if len(listState.Items) != 1 || listState.Items[0].ID.ValueString() != "invite_2" {
+		t.Fatalf("unexpected invite list state: %#v", listState)
+	}
+}
+
+func TestOrganizationDataRetentionAndSpendLimitResourcesWithMockClient(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeAdminClient{}
+
+	retention := &organizationDataRetentionResource{client: fake}
+	retentionSchema := resourceSchema(ctx, t, retention)
+	retentionPlan := tfsdk.Plan{Schema: retentionSchema}
+	if diags := retentionPlan.Set(ctx, &organizationDataRetentionResourceModel{Type: types.StringValue("zero_data_retention")}); diags.HasError() {
+		t.Fatalf("retention plan set: %v", diags)
+	}
+	retentionResp := resource.CreateResponse{State: tfsdk.State{Schema: retentionSchema}}
+	retention.Create(ctx, resource.CreateRequest{Plan: retentionPlan}, &retentionResp)
+	if retentionResp.Diagnostics.HasError() || fake.updatedDataRetentionReq.Type != "zero_data_retention" {
+		t.Fatalf("retention diagnostics=%v request=%#v", retentionResp.Diagnostics, fake.updatedDataRetentionReq)
+	}
+
+	limit := &organizationSpendLimitResource{client: fake}
+	limitSchema := resourceSchema(ctx, t, limit)
+	limitPlan := tfsdk.Plan{Schema: limitSchema}
+	if diags := limitPlan.Set(ctx, &organizationSpendLimitResourceModel{ThresholdAmount: types.Int64Value(25000), Currency: types.StringValue("USD"), Interval: types.StringValue("month")}); diags.HasError() {
+		t.Fatalf("limit plan set: %v", diags)
+	}
+	limitResp := resource.CreateResponse{State: tfsdk.State{Schema: limitSchema}}
+	limit.Create(ctx, resource.CreateRequest{Plan: limitPlan}, &limitResp)
+	if limitResp.Diagnostics.HasError() || fake.updatedSpendLimitReq.ThresholdAmount != 25000 {
+		t.Fatalf("limit diagnostics=%v request=%#v", limitResp.Diagnostics, fake.updatedSpendLimitReq)
+	}
+	limitDeleteResp := resource.DeleteResponse{State: limitResp.State}
+	limit.Delete(ctx, resource.DeleteRequest{State: limitResp.State}, &limitDeleteResp)
+	if limitDeleteResp.Diagnostics.HasError() || !fake.deletedSpendLimit {
+		t.Fatalf("limit delete diagnostics=%v deleted=%t", limitDeleteResp.Diagnostics, fake.deletedSpendLimit)
+	}
+}
+
+func TestOrganizationSpendAlertResourceAndDataSourcesWithMockClient(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeAdminClient{}
+	recipients, diags := setStringValue(ctx, []string{"finops@example.com"})
+	if diags.HasError() {
+		t.Fatalf("recipients set: %v", diags)
+	}
+	r := &organizationSpendAlertResource{client: fake}
+	schema := resourceSchema(ctx, t, r)
+	plan := tfsdk.Plan{Schema: schema}
+	if diags := plan.Set(ctx, &organizationSpendAlertResourceModel{ThresholdAmount: types.Int64Value(10000), Currency: types.StringValue("USD"), Interval: types.StringValue("month"), NotificationChannel: spendAlertNotificationChannelModel{Recipients: recipients, Type: types.StringValue("email"), SubjectPrefix: types.StringValue("OpenAI")}}); diags.HasError() {
+		t.Fatalf("plan set: %v", diags)
+	}
+	createResp := resource.CreateResponse{State: tfsdk.State{Schema: schema}}
+	r.Create(ctx, resource.CreateRequest{Plan: plan}, &createResp)
+	if createResp.Diagnostics.HasError() {
+		t.Fatalf("create diagnostics: %v", createResp.Diagnostics)
+	}
+	if fake.createdSpendAlertReq.ThresholdAmount != 10000 || fake.createdSpendAlertReq.NotificationChannel.Recipients[0] != "finops@example.com" {
+		t.Fatalf("unexpected spend alert request: %#v", fake.createdSpendAlertReq)
+	}
+	var state organizationSpendAlertResourceModel
+	if diags := createResp.State.Get(ctx, &state); diags.HasError() {
+		t.Fatalf("state get: %v", diags)
+	}
+	if state.ID.ValueString() != "alert_1" || state.NotificationChannel.SubjectPrefix.ValueString() != "OpenAI" {
+		t.Fatalf("unexpected spend alert state: %#v", state)
+	}
+
+	state.ThresholdAmount = types.Int64Value(20000)
+	plan2 := tfsdk.Plan{Schema: schema}
+	if diags := plan2.Set(ctx, &state); diags.HasError() {
+		t.Fatalf("plan2 set: %v", diags)
+	}
+	updateResp := resource.UpdateResponse{State: tfsdk.State{Schema: schema}}
+	r.Update(ctx, resource.UpdateRequest{Plan: plan2}, &updateResp)
+	if updateResp.Diagnostics.HasError() || fake.updatedSpendAlertReq.ThresholdAmount != 20000 {
+		t.Fatalf("update diagnostics=%v request=%#v", updateResp.Diagnostics, fake.updatedSpendAlertReq)
+	}
+	deleteResp := resource.DeleteResponse{State: updateResp.State}
+	r.Delete(ctx, resource.DeleteRequest{State: updateResp.State}, &deleteResp)
+	if deleteResp.Diagnostics.HasError() || fake.deletedSpendAlert != "alert_1" {
+		t.Fatalf("delete diagnostics=%v deleted=%q", deleteResp.Diagnostics, fake.deletedSpendAlert)
+	}
+}
+
+func TestOrganizationCertificateResourceAndDataSourcesWithMockClient(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeAdminClient{}
+	r := &organizationCertificateResource{client: fake}
+	schema := resourceSchema(ctx, t, r)
+	plan := tfsdk.Plan{Schema: schema}
+	if diags := plan.Set(ctx, &organizationCertificateResourceModel{Name: types.StringValue("gateway"), Certificate: types.StringValue("pem"), Active: types.BoolValue(true)}); diags.HasError() {
+		t.Fatalf("plan set: %v", diags)
+	}
+	createResp := resource.CreateResponse{State: tfsdk.State{Schema: schema}}
+	r.Create(ctx, resource.CreateRequest{Plan: plan}, &createResp)
+	if createResp.Diagnostics.HasError() {
+		t.Fatalf("create diagnostics: %v", createResp.Diagnostics)
+	}
+	if fake.createdCertificateReq.Certificate != "pem" || len(fake.activatedCertificates) != 1 || fake.activatedCertificates[0] != "cert_1" {
+		t.Fatalf("unexpected certificate calls: create=%#v activated=%#v", fake.createdCertificateReq, fake.activatedCertificates)
+	}
+	var state organizationCertificateResourceModel
+	if diags := createResp.State.Get(ctx, &state); diags.HasError() {
+		t.Fatalf("state get: %v", diags)
+	}
+	if state.ID.ValueString() != "cert_1" || !state.Active.ValueBool() || state.Certificate.ValueString() != "pem" {
+		t.Fatalf("unexpected certificate state: %#v", state)
+	}
+
+	state.Name = types.StringValue("gateway-2")
+	state.Active = types.BoolValue(false)
+	plan2 := tfsdk.Plan{Schema: schema}
+	if diags := plan2.Set(ctx, &state); diags.HasError() {
+		t.Fatalf("plan2 set: %v", diags)
+	}
+	updateResp := resource.UpdateResponse{State: tfsdk.State{Schema: schema}}
+	r.Update(ctx, resource.UpdateRequest{Plan: plan2, State: createResp.State}, &updateResp)
+	if updateResp.Diagnostics.HasError() || fake.updatedCertificateReq.Name != "gateway-2" || len(fake.deactivatedCertificates) != 1 {
+		t.Fatalf("update diagnostics=%v update=%#v deactivated=%#v", updateResp.Diagnostics, fake.updatedCertificateReq, fake.deactivatedCertificates)
+	}
+	deleteResp := resource.DeleteResponse{State: updateResp.State}
+	r.Delete(ctx, resource.DeleteRequest{State: updateResp.State}, &deleteResp)
+	if deleteResp.Diagnostics.HasError() || fake.deletedCertificate != "cert_1" {
+		t.Fatalf("delete diagnostics=%v deleted=%q", deleteResp.Diagnostics, fake.deletedCertificate)
+	}
+
+	ds := &organizationCertificateDataSource{client: fake}
+	dsSchema := dataSourceSchema(ctx, t, ds)
+	dsPlan := tfsdk.Plan{Schema: dsSchema}
+	if diags := dsPlan.Set(ctx, &organizationCertificateDataSourceModel{ID: types.StringValue("cert_1"), IncludeContent: types.BoolValue(true)}); diags.HasError() {
+		t.Fatalf("ds config set: %v", diags)
+	}
+	dsResp := datasource.ReadResponse{State: tfsdk.State{Schema: dsSchema}}
+	ds.Read(ctx, datasource.ReadRequest{Config: tfsdk.Config{Schema: dsSchema, Raw: dsPlan.Raw}}, &dsResp)
+	if dsResp.Diagnostics.HasError() {
+		t.Fatalf("ds diagnostics: %v", dsResp.Diagnostics)
+	}
+	var dsState organizationCertificateDataSourceModel
+	if diags := dsResp.State.Get(ctx, &dsState); diags.HasError() {
+		t.Fatalf("ds state get: %v", diags)
+	}
+	if dsState.ID.ValueString() != "cert_1" || dsState.CertificateDetails.ExpiresAt.ValueInt64() != 61 {
+		t.Fatalf("unexpected certificate data source state: %#v", dsState)
 	}
 }

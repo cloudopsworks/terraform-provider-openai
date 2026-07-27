@@ -379,6 +379,396 @@ func (c *OpenAIAdminClient) DeleteAdminAPIKey(ctx context.Context, id string) er
 	return nil
 }
 
+func (c *OpenAIAdminClient) CreateInvite(ctx context.Context, req InviteCreateRequest) (*Invite, error) {
+	params := openai.AdminOrganizationInviteNewParams{
+		Email: req.Email,
+		Role:  openai.AdminOrganizationInviteNewParamsRole(req.Role),
+	}
+	if req.Projects != nil {
+		params.Projects = make([]openai.AdminOrganizationInviteNewParamsProject, 0, len(req.Projects))
+		for _, project := range req.Projects {
+			params.Projects = append(params.Projects, openai.AdminOrganizationInviteNewParamsProject{
+				ID:   project.ID,
+				Role: project.Role,
+			})
+		}
+	}
+	invite, err := c.client.Admin.Organization.Invites.New(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return mapInvite(invite)
+}
+
+func (c *OpenAIAdminClient) GetInvite(ctx context.Context, id string) (*Invite, error) {
+	invite, err := c.client.Admin.Organization.Invites.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return mapInvite(invite)
+}
+
+func (c *OpenAIAdminClient) ListInvites(ctx context.Context, req InviteListRequest) (*InviteListResponse, error) {
+	params := openai.AdminOrganizationInviteListParams{}
+	if req.After != "" {
+		params.After = openai.String(req.After)
+	}
+	if req.Limit > 0 {
+		params.Limit = openai.Int(req.Limit)
+	}
+	page, err := c.client.Admin.Organization.Invites.List(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	resp := &InviteListResponse{Items: make([]Invite, 0, len(page.Data)), HasMore: page.HasMore, LastID: page.LastID}
+	for _, invite := range page.Data {
+		mapped, err := mapInvite(&invite)
+		if err != nil {
+			return nil, err
+		}
+		resp.Items = append(resp.Items, *mapped)
+	}
+	if resp.LastID == "" && len(resp.Items) > 0 {
+		resp.LastID = resp.Items[len(resp.Items)-1].ID
+	}
+	return resp, nil
+}
+
+func (c *OpenAIAdminClient) DeleteInvite(ctx context.Context, id string) error {
+	deleted, err := c.client.Admin.Organization.Invites.Delete(ctx, id)
+	if err != nil {
+		return err
+	}
+	if deleted == nil {
+		return fmt.Errorf("openai invite delete response for %q was empty", id)
+	}
+	if !deleted.Deleted {
+		return fmt.Errorf("openai invite %q was not deleted: delete response returned deleted=false", id)
+	}
+	if deleted.ID != "" && deleted.ID != id {
+		return fmt.Errorf("openai invite delete response id mismatch: requested %q, got %q", id, deleted.ID)
+	}
+	return nil
+}
+
+func (c *OpenAIAdminClient) GetOrganizationDataRetention(ctx context.Context) (*DataRetention, error) {
+	retention, err := c.client.Admin.Organization.DataRetention.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mapOrganizationDataRetention(retention)
+}
+
+func (c *OpenAIAdminClient) UpdateOrganizationDataRetention(ctx context.Context, req DataRetentionUpdateRequest) (*DataRetention, error) {
+	retention, err := c.client.Admin.Organization.DataRetention.Update(ctx, openai.AdminOrganizationDataRetentionUpdateParams{
+		RetentionType: openai.AdminOrganizationDataRetentionUpdateParamsRetentionType(req.Type),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapOrganizationDataRetention(retention)
+}
+
+func (c *OpenAIAdminClient) GetOrganizationSpendLimit(ctx context.Context) (*SpendLimit, error) {
+	limit, err := c.client.Admin.Organization.SpendLimit.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mapOrganizationSpendLimit(limit)
+}
+
+func (c *OpenAIAdminClient) UpdateOrganizationSpendLimit(ctx context.Context, req SpendLimitUpdateRequest) (*SpendLimit, error) {
+	params := openai.AdminOrganizationSpendLimitUpdateParams{
+		Currency:        openai.AdminOrganizationSpendLimitUpdateParamsCurrency(req.Currency),
+		Interval:        openai.AdminOrganizationSpendLimitUpdateParamsInterval(req.Interval),
+		ThresholdAmount: req.ThresholdAmount,
+	}
+	if params.Currency == "" {
+		params.Currency = openai.AdminOrganizationSpendLimitUpdateParamsCurrencyUsd
+	}
+	if params.Interval == "" {
+		params.Interval = openai.AdminOrganizationSpendLimitUpdateParamsIntervalMonth
+	}
+	limit, err := c.client.Admin.Organization.SpendLimit.Update(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return mapOrganizationSpendLimit(limit)
+}
+
+func (c *OpenAIAdminClient) DeleteOrganizationSpendLimit(ctx context.Context) error {
+	deleted, err := c.client.Admin.Organization.SpendLimit.Delete(ctx)
+	if err != nil {
+		return err
+	}
+	if deleted == nil {
+		return fmt.Errorf("openai organization spend limit delete response was empty")
+	}
+	if !deleted.Deleted {
+		return fmt.Errorf("openai organization spend limit was not deleted: delete response returned deleted=false")
+	}
+	return nil
+}
+
+func (c *OpenAIAdminClient) CreateOrganizationSpendAlert(ctx context.Context, req SpendAlertCreateRequest) (*SpendAlert, error) {
+	params := openai.AdminOrganizationSpendAlertNewParams{
+		Currency:        openai.AdminOrganizationSpendAlertNewParamsCurrency(req.Currency),
+		Interval:        openai.AdminOrganizationSpendAlertNewParamsInterval(req.Interval),
+		ThresholdAmount: req.ThresholdAmount,
+		NotificationChannel: openai.AdminOrganizationSpendAlertNewParamsNotificationChannel{
+			Recipients: append([]string(nil), req.NotificationChannel.Recipients...),
+		},
+	}
+	if params.Currency == "" {
+		params.Currency = openai.AdminOrganizationSpendAlertNewParamsCurrencyUsd
+	}
+	if params.Interval == "" {
+		params.Interval = openai.AdminOrganizationSpendAlertNewParamsIntervalMonth
+	}
+	if req.NotificationChannel.SubjectPrefix != "" {
+		params.NotificationChannel.SubjectPrefix = openai.String(req.NotificationChannel.SubjectPrefix)
+	}
+	alert, err := c.client.Admin.Organization.SpendAlerts.New(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return mapOrganizationSpendAlert(alert)
+}
+
+func (c *OpenAIAdminClient) GetOrganizationSpendAlert(ctx context.Context, id string) (*SpendAlert, error) {
+	alert, err := c.client.Admin.Organization.SpendAlerts.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return mapOrganizationSpendAlert(alert)
+}
+
+func (c *OpenAIAdminClient) ListOrganizationSpendAlerts(ctx context.Context, req SpendAlertListRequest) (*SpendAlertListResponse, error) {
+	params := openai.AdminOrganizationSpendAlertListParams{}
+	if req.After != "" {
+		params.After = openai.String(req.After)
+	}
+	if req.Before != "" {
+		params.Before = openai.String(req.Before)
+	}
+	if req.Limit > 0 {
+		params.Limit = openai.Int(req.Limit)
+	}
+	switch req.Order {
+	case "asc":
+		params.Order = openai.AdminOrganizationSpendAlertListParamsOrderAsc
+	case "desc":
+		params.Order = openai.AdminOrganizationSpendAlertListParamsOrderDesc
+	}
+	page, err := c.client.Admin.Organization.SpendAlerts.List(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	resp := &SpendAlertListResponse{Items: make([]SpendAlert, 0, len(page.Data)), HasMore: page.HasMore, LastID: page.LastID}
+	for _, alert := range page.Data {
+		mapped, err := mapOrganizationSpendAlert(&alert)
+		if err != nil {
+			return nil, err
+		}
+		resp.Items = append(resp.Items, *mapped)
+	}
+	if resp.LastID == "" && len(resp.Items) > 0 {
+		resp.LastID = resp.Items[len(resp.Items)-1].ID
+	}
+	return resp, nil
+}
+
+func (c *OpenAIAdminClient) UpdateOrganizationSpendAlert(ctx context.Context, id string, req SpendAlertUpdateRequest) (*SpendAlert, error) {
+	params := openai.AdminOrganizationSpendAlertUpdateParams{
+		Currency:        openai.AdminOrganizationSpendAlertUpdateParamsCurrency(req.Currency),
+		Interval:        openai.AdminOrganizationSpendAlertUpdateParamsInterval(req.Interval),
+		ThresholdAmount: req.ThresholdAmount,
+		NotificationChannel: openai.AdminOrganizationSpendAlertUpdateParamsNotificationChannel{
+			Recipients: append([]string(nil), req.NotificationChannel.Recipients...),
+		},
+	}
+	if params.Currency == "" {
+		params.Currency = openai.AdminOrganizationSpendAlertUpdateParamsCurrencyUsd
+	}
+	if params.Interval == "" {
+		params.Interval = openai.AdminOrganizationSpendAlertUpdateParamsIntervalMonth
+	}
+	if req.NotificationChannel.SubjectPrefix != "" {
+		params.NotificationChannel.SubjectPrefix = openai.String(req.NotificationChannel.SubjectPrefix)
+	}
+	alert, err := c.client.Admin.Organization.SpendAlerts.Update(ctx, id, params)
+	if err != nil {
+		return nil, err
+	}
+	return mapOrganizationSpendAlert(alert)
+}
+
+func (c *OpenAIAdminClient) DeleteOrganizationSpendAlert(ctx context.Context, id string) error {
+	deleted, err := c.client.Admin.Organization.SpendAlerts.Delete(ctx, id)
+	if err != nil {
+		return err
+	}
+	if deleted == nil {
+		return fmt.Errorf("openai organization spend alert delete response for %q was empty", id)
+	}
+	if !deleted.Deleted {
+		return fmt.Errorf("openai organization spend alert %q was not deleted: delete response returned deleted=false", id)
+	}
+	if deleted.ID != "" && deleted.ID != id {
+		return fmt.Errorf("openai organization spend alert delete response id mismatch: requested %q, got %q", id, deleted.ID)
+	}
+	return nil
+}
+
+func (c *OpenAIAdminClient) CreateOrganizationCertificate(ctx context.Context, req CertificateCreateRequest) (*Certificate, error) {
+	params := openai.AdminOrganizationCertificateNewParams{Certificate: req.Certificate}
+	if req.Name != "" {
+		params.Name = openai.String(req.Name)
+	}
+	certificate, err := c.client.Admin.Organization.Certificates.New(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return mapCertificate(certificate)
+}
+
+func (c *OpenAIAdminClient) GetOrganizationCertificate(ctx context.Context, id string, includeContent bool) (*Certificate, error) {
+	params := openai.AdminOrganizationCertificateGetParams{}
+	if includeContent {
+		params.Include = []string{"content"}
+	}
+	certificate, err := c.client.Admin.Organization.Certificates.Get(ctx, id, params)
+	if err != nil {
+		return nil, err
+	}
+	mapped, err := mapCertificate(certificate)
+	if err != nil {
+		return nil, err
+	}
+	active, found, err := c.organizationCertificateActive(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		mapped.Active = active
+	}
+	return mapped, nil
+}
+
+func (c *OpenAIAdminClient) ListOrganizationCertificates(ctx context.Context, req CertificateListRequest) (*CertificateListResponse, error) {
+	params := openai.AdminOrganizationCertificateListParams{}
+	if req.After != "" {
+		params.After = openai.String(req.After)
+	}
+	if req.Limit > 0 {
+		params.Limit = openai.Int(req.Limit)
+	}
+	switch req.Order {
+	case "asc":
+		params.Order = openai.AdminOrganizationCertificateListParamsOrderAsc
+	case "desc":
+		params.Order = openai.AdminOrganizationCertificateListParamsOrderDesc
+	}
+	page, err := c.client.Admin.Organization.Certificates.List(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	resp := &CertificateListResponse{Items: make([]Certificate, 0, len(page.Data)), HasMore: page.HasMore, LastID: page.LastID}
+	for _, certificate := range page.Data {
+		mapped, err := mapOrganizationCertificateListItem(&certificate)
+		if err != nil {
+			return nil, err
+		}
+		resp.Items = append(resp.Items, *mapped)
+	}
+	if resp.LastID == "" && len(resp.Items) > 0 {
+		resp.LastID = resp.Items[len(resp.Items)-1].ID
+	}
+	return resp, nil
+}
+
+func (c *OpenAIAdminClient) UpdateOrganizationCertificate(ctx context.Context, id string, req CertificateUpdateRequest) (*Certificate, error) {
+	params := openai.AdminOrganizationCertificateUpdateParams{}
+	if req.Name != "" {
+		params.Name = openai.String(req.Name)
+	}
+	certificate, err := c.client.Admin.Organization.Certificates.Update(ctx, id, params)
+	if err != nil {
+		return nil, err
+	}
+	mapped, err := mapCertificate(certificate)
+	if err != nil {
+		return nil, err
+	}
+	active, found, err := c.organizationCertificateActive(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		mapped.Active = active
+	}
+	return mapped, nil
+}
+
+func (c *OpenAIAdminClient) SetOrganizationCertificatesActive(ctx context.Context, ids []string, active bool) ([]Certificate, error) {
+	cleanIDs := append([]string(nil), ids...)
+	if active {
+		page, err := c.client.Admin.Organization.Certificates.Activate(ctx, openai.AdminOrganizationCertificateActivateParams{CertificateIDs: cleanIDs})
+		if err != nil {
+			return nil, err
+		}
+		certificates := make([]Certificate, 0, len(page.Data))
+		for _, certificate := range page.Data {
+			mapped, err := mapOrganizationCertificateActivateItem(&certificate)
+			if err != nil {
+				return nil, err
+			}
+			certificates = append(certificates, *mapped)
+		}
+		return certificates, nil
+	}
+	page, err := c.client.Admin.Organization.Certificates.Deactivate(ctx, openai.AdminOrganizationCertificateDeactivateParams{CertificateIDs: cleanIDs})
+	if err != nil {
+		return nil, err
+	}
+	certificates := make([]Certificate, 0, len(page.Data))
+	for _, certificate := range page.Data {
+		mapped, err := mapOrganizationCertificateDeactivateItem(&certificate)
+		if err != nil {
+			return nil, err
+		}
+		certificates = append(certificates, *mapped)
+	}
+	return certificates, nil
+}
+
+func (c *OpenAIAdminClient) DeleteOrganizationCertificate(ctx context.Context, id string) error {
+	deleted, err := c.client.Admin.Organization.Certificates.Delete(ctx, id)
+	if err != nil {
+		return err
+	}
+	if deleted == nil {
+		return fmt.Errorf("openai organization certificate delete response for %q was empty", id)
+	}
+	if deleted.ID != "" && deleted.ID != id {
+		return fmt.Errorf("openai organization certificate delete response id mismatch: requested %q, got %q", id, deleted.ID)
+	}
+	return nil
+}
+
+func (c *OpenAIAdminClient) organizationCertificateActive(ctx context.Context, id string) (bool, bool, error) {
+	page, err := c.client.Admin.Organization.Certificates.List(ctx, openai.AdminOrganizationCertificateListParams{Limit: openai.Int(100)})
+	if err != nil {
+		return false, false, err
+	}
+	for _, certificate := range page.Data {
+		if certificate.ID == id {
+			return certificate.Active, true, nil
+		}
+	}
+	return false, false, nil
+}
+
 func (c *OpenAIAdminClient) GetOrganizationUser(ctx context.Context, userID string) (*OrganizationUser, error) {
 	user, err := c.client.Admin.Organization.Users.Get(ctx, userID)
 	if err != nil {
@@ -919,6 +1309,213 @@ func validateAdminAPIKeyCreate(apiKey *AdminAPIKey) error {
 		return err
 	}
 	return requireNonEmpty("admin api key", "value", apiKey.Value)
+}
+
+func mapInvite(invite *openai.Invite) (*Invite, error) {
+	if invite == nil {
+		return nil, fmt.Errorf("openai invite response was empty")
+	}
+	mapped := &Invite{
+		ID:         invite.ID,
+		Email:      invite.Email,
+		Role:       string(invite.Role),
+		Status:     string(invite.Status),
+		CreatedAt:  invite.CreatedAt,
+		AcceptedAt: invite.AcceptedAt,
+		ExpiresAt:  invite.ExpiresAt,
+		Projects:   make([]InviteProject, 0, len(invite.Projects)),
+	}
+	for _, project := range invite.Projects {
+		mapped.Projects = append(mapped.Projects, InviteProject{ID: project.ID, Role: project.Role})
+	}
+	if err := validateInvite(mapped); err != nil {
+		return nil, err
+	}
+	return mapped, nil
+}
+
+func validateInvite(invite *Invite) error {
+	if invite == nil {
+		return fmt.Errorf("openai invite response was empty")
+	}
+	if err := requireNonEmpty("invite", "id", invite.ID); err != nil {
+		return err
+	}
+	return requireNonEmpty("invite", "email", invite.Email)
+}
+
+func mapOrganizationDataRetention(retention *openai.OrganizationDataRetention) (*DataRetention, error) {
+	if retention == nil {
+		return nil, fmt.Errorf("openai organization data retention response was empty")
+	}
+	mapped := &DataRetention{ID: "organization", Type: string(retention.Type)}
+	if err := validateDataRetention(mapped); err != nil {
+		return nil, err
+	}
+	return mapped, nil
+}
+
+func validateDataRetention(retention *DataRetention) error {
+	if retention == nil {
+		return fmt.Errorf("openai organization data retention response was empty")
+	}
+	return requireNonEmpty("organization data retention", "type", retention.Type)
+}
+
+func mapOrganizationSpendLimit(limit *openai.OrganizationSpendLimit) (*SpendLimit, error) {
+	if limit == nil {
+		return nil, fmt.Errorf("openai organization spend limit response was empty")
+	}
+	mapped := &SpendLimit{
+		ID:                "organization",
+		Currency:          string(limit.Currency),
+		Interval:          string(limit.Interval),
+		ThresholdAmount:   limit.ThresholdAmount,
+		EnforcementStatus: limit.Enforcement.Status,
+	}
+	if err := validateSpendLimit(mapped); err != nil {
+		return nil, err
+	}
+	return mapped, nil
+}
+
+func validateSpendLimit(limit *SpendLimit) error {
+	if limit == nil {
+		return fmt.Errorf("openai organization spend limit response was empty")
+	}
+	if err := requireNonEmpty("organization spend limit", "currency", limit.Currency); err != nil {
+		return err
+	}
+	return requireNonEmpty("organization spend limit", "interval", limit.Interval)
+}
+
+func mapOrganizationSpendAlert(alert *openai.OrganizationSpendAlert) (*SpendAlert, error) {
+	if alert == nil {
+		return nil, fmt.Errorf("openai organization spend alert response was empty")
+	}
+	mapped := &SpendAlert{
+		ID:              alert.ID,
+		Currency:        string(alert.Currency),
+		Interval:        string(alert.Interval),
+		ThresholdAmount: alert.ThresholdAmount,
+		NotificationChannel: SpendAlertNotificationChannel{
+			Recipients:    append([]string(nil), alert.NotificationChannel.Recipients...),
+			Type:          string(alert.NotificationChannel.Type),
+			SubjectPrefix: alert.NotificationChannel.SubjectPrefix,
+		},
+	}
+	if mapped.NotificationChannel.Type == "" {
+		mapped.NotificationChannel.Type = "email"
+	}
+	if err := validateSpendAlert(mapped); err != nil {
+		return nil, err
+	}
+	return mapped, nil
+}
+
+func validateSpendAlert(alert *SpendAlert) error {
+	if alert == nil {
+		return fmt.Errorf("openai organization spend alert response was empty")
+	}
+	if err := requireNonEmpty("organization spend alert", "id", alert.ID); err != nil {
+		return err
+	}
+	if err := requireNonEmpty("organization spend alert", "currency", alert.Currency); err != nil {
+		return err
+	}
+	return requireNonEmpty("organization spend alert", "interval", alert.Interval)
+}
+
+func mapCertificate(certificate *openai.Certificate) (*Certificate, error) {
+	if certificate == nil {
+		return nil, fmt.Errorf("openai organization certificate response was empty")
+	}
+	mapped := &Certificate{
+		ID:        certificate.ID,
+		Name:      certificate.Name,
+		Object:    string(certificate.Object),
+		Active:    certificate.Active,
+		CreatedAt: certificate.CreatedAt,
+		CertificateDetails: CertificateDetails{
+			Content:   certificate.CertificateDetails.Content,
+			ExpiresAt: certificate.CertificateDetails.ExpiresAt,
+			ValidAt:   certificate.CertificateDetails.ValidAt,
+		},
+	}
+	if err := validateCertificate(mapped); err != nil {
+		return nil, err
+	}
+	return mapped, nil
+}
+
+func mapOrganizationCertificateListItem(certificate *openai.AdminOrganizationCertificateListResponse) (*Certificate, error) {
+	if certificate == nil {
+		return nil, fmt.Errorf("openai organization certificate response was empty")
+	}
+	mapped := &Certificate{
+		ID:        certificate.ID,
+		Name:      certificate.Name,
+		Object:    string(certificate.Object),
+		Active:    certificate.Active,
+		CreatedAt: certificate.CreatedAt,
+		CertificateDetails: CertificateDetails{
+			ExpiresAt: certificate.CertificateDetails.ExpiresAt,
+			ValidAt:   certificate.CertificateDetails.ValidAt,
+		},
+	}
+	if err := validateCertificate(mapped); err != nil {
+		return nil, err
+	}
+	return mapped, nil
+}
+
+func mapOrganizationCertificateActivateItem(certificate *openai.AdminOrganizationCertificateActivateResponse) (*Certificate, error) {
+	if certificate == nil {
+		return nil, fmt.Errorf("openai organization certificate activate response was empty")
+	}
+	mapped := &Certificate{
+		ID:        certificate.ID,
+		Name:      certificate.Name,
+		Object:    string(certificate.Object),
+		Active:    certificate.Active,
+		CreatedAt: certificate.CreatedAt,
+		CertificateDetails: CertificateDetails{
+			ExpiresAt: certificate.CertificateDetails.ExpiresAt,
+			ValidAt:   certificate.CertificateDetails.ValidAt,
+		},
+	}
+	if err := validateCertificate(mapped); err != nil {
+		return nil, err
+	}
+	return mapped, nil
+}
+
+func mapOrganizationCertificateDeactivateItem(certificate *openai.AdminOrganizationCertificateDeactivateResponse) (*Certificate, error) {
+	if certificate == nil {
+		return nil, fmt.Errorf("openai organization certificate deactivate response was empty")
+	}
+	mapped := &Certificate{
+		ID:        certificate.ID,
+		Name:      certificate.Name,
+		Object:    string(certificate.Object),
+		Active:    certificate.Active,
+		CreatedAt: certificate.CreatedAt,
+		CertificateDetails: CertificateDetails{
+			ExpiresAt: certificate.CertificateDetails.ExpiresAt,
+			ValidAt:   certificate.CertificateDetails.ValidAt,
+		},
+	}
+	if err := validateCertificate(mapped); err != nil {
+		return nil, err
+	}
+	return mapped, nil
+}
+
+func validateCertificate(certificate *Certificate) error {
+	if certificate == nil {
+		return fmt.Errorf("openai organization certificate response was empty")
+	}
+	return requireNonEmpty("organization certificate", "id", certificate.ID)
 }
 
 func mapOrganizationUser(user *openai.OrganizationUser) (*OrganizationUser, error) {
