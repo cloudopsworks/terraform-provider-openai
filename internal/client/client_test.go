@@ -381,6 +381,10 @@ func TestOpenAIAdminClientAdminAPIKeyLifecycle(t *testing.T) {
 			if body["name"] != "admin-key" || body["expires_in_seconds"] != float64(3600) {
 				t.Fatalf("unexpected admin key create body: %#v", body)
 			}
+			scopes, ok := body["scopes"].([]any)
+			if !ok || len(scopes) != 2 || scopes[0] != "organization.users.read" || scopes[1] != "organization.projects.read" {
+				t.Fatalf("unexpected admin key scopes: %#v", body["scopes"])
+			}
 			return jsonResponse(adminAPIKeyJSON("admin_key_1", "admin-key", "sk-admin-created")), nil
 		case "GET /organization/admin_api_keys/admin_key_1":
 			return jsonResponse(adminAPIKeyJSON("admin_key_1", "admin-key", "")), nil
@@ -403,7 +407,7 @@ func TestOpenAIAdminClientAdminAPIKeyLifecycle(t *testing.T) {
 		return nil, nil
 	})
 
-	created, err := cl.CreateAdminAPIKey(context.Background(), AdminAPIKeyCreateRequest{Name: "admin-key", ExpiresInSeconds: 3600})
+	created, err := cl.CreateAdminAPIKey(context.Background(), AdminAPIKeyCreateRequest{Name: "admin-key", ExpiresInSeconds: 3600, Scopes: []string{"organization.users.read", "organization.projects.read"}})
 	if err != nil || created.Value != "sk-admin-created" || created.OwnerID != "user_1" {
 		t.Fatalf("CreateAdminAPIKey() = %#v, %v", created, err)
 	}

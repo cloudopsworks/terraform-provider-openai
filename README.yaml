@@ -270,7 +270,22 @@ usage: |-
   = true }` for critical admin keys and roles that could lock out automation.
   For admin API key expiration, configure at most one of `expires_in_seconds`,
   `expire_in_hours`, or `expire_in_days`; hours and days are converted to OpenAI's
-  seconds-based create parameter.
+  seconds-based create parameter. Admin API key `scopes` are optional create-only
+  strings sent as the create request `scopes` array; changing scopes replaces the
+  key and imported keys should leave scopes unset unless replacement is intended.
+
+  Admin API key scoped example:
+
+  ```hcl
+  resource "openai_admin_api_key" "readonly_admin" {
+    name           = "readonly-admin-automation"
+    expire_in_days = 30
+    scopes = [
+      "organization.users.read",
+      "organization.projects.read",
+    ]
+  }
+  ```
 
   ## Supported data sources
 

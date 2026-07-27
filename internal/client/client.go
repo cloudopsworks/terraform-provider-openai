@@ -293,7 +293,11 @@ func (c *OpenAIAdminClient) CreateAdminAPIKey(ctx context.Context, req AdminAPIK
 	if req.ExpiresInSeconds > 0 {
 		params.ExpiresInSeconds = openai.Int(req.ExpiresInSeconds)
 	}
-	created, err := c.client.Admin.Organization.AdminAPIKeys.New(ctx, params)
+	opts := []option.RequestOption{}
+	if len(req.Scopes) > 0 {
+		opts = append(opts, option.WithJSONSet("scopes", append([]string(nil), req.Scopes...)))
+	}
+	created, err := c.client.Admin.Organization.AdminAPIKeys.New(ctx, params, opts...)
 	if err != nil {
 		return nil, err
 	}
