@@ -13,10 +13,12 @@
 # Terraform Provider OpenAI [![Latest Release](https://img.shields.io/github/release/cloudopsworks/terraform-provider-openai.svg?style=for-the-badge)](https://github.com/cloudopsworks/terraform-provider-openai/releases/latest) [![Terraform Registry](https://img.shields.io/badge/registry-cloudopsworks%2Fopenai-844FBA?style=for-the-badge&logo=terraform)](https://registry.terraform.io/providers/cloudopsworks/openai/latest) [![OpenTofu](https://img.shields.io/badge/OpenTofu-compatible-FFDA18?style=for-the-badge&logo=opentofu&logoColor=black)](https://opentofu.org) [![Go Report Card](https://goreportcard.com/badge/github.com/cloudopsworks/terraform-provider-openai?style=for-the-badge)](https://goreportcard.com/report/github.com/cloudopsworks/terraform-provider-openai) [![Last Updated](https://img.shields.io/github/last-commit/cloudopsworks/terraform-provider-openai.svg?style=for-the-badge)](https://github.com/cloudopsworks/terraform-provider-openai/commits)
 
 
-Terraform/OpenTofu provider for OpenAI Administration APIs. V1 manages projects,
-project service accounts, and service-account project API keys using an existing
-OpenAI admin API key supplied directly, from OpenAI environment variables,
-or resolved from AWS Secrets Manager, Google Secret Manager, or Azure Key Vault.
+Terraform/OpenTofu provider for OpenAI Administration APIs. It manages projects,
+project service accounts, service-account project API keys, organization admin
+API keys, groups, group membership, organization/project custom roles, and
+user/group role assignments using an existing OpenAI admin API key supplied
+directly, from OpenAI environment variables, or resolved from AWS Secrets
+Manager, Google Secret Manager, or Azure Key Vault.
 
 
 ---
@@ -44,14 +46,17 @@ It's 100% Open Source and licensed under the [APACHE2](LICENSE).
 
 ## Introduction
 
-This provider turns a small but important OpenAI organization bootstrap path into
-reviewed infrastructure-as-code: create a project, create a service account, and
-issue the service account's project API key.
+This provider turns OpenAI organization administration into reviewed
+infrastructure-as-code: create projects, create service accounts, issue project
+API keys, rotate admin API keys, organize users into groups, and manage
+organization/project roles and role assignments.
 
-V1 intentionally does not manage organization-level admin API key lifecycle.
-It consumes an existing admin key from provider configuration, OpenAI environment
-variables, or a cloud secret manager without storing that resolved key in Terraform
-state.
+Organization users are exposed as data sources because the current OpenAI Go SDK
+does not expose a user creation endpoint. User access is managed through group
+membership and role assignment resources, while the provider continues to
+consume an existing bootstrap admin key from configuration, environment
+variables, or a cloud secret manager without storing that resolved provider key
+in Terraform state.
 
 ## Usage
 
@@ -165,6 +170,46 @@ resource "openai_project_api_key" "app" {
 `openai_project_api_key.value` is Sensitive and returned only at create time.
 Protect Terraform state accordingly.
 
+## Organization access management
+
+```hcl
+resource "openai_admin_api_key" "automation" {
+  name = "terraform-automation"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+data "openai_organization_user" "alice" {
+  id = "user_123"
+}
+
+resource "openai_organization_group" "engineering" {
+  name = "Engineering"
+}
+
+resource "openai_organization_group_user" "engineering_alice" {
+  group_id = openai_organization_group.engineering.id
+  user_id  = data.openai_organization_user.alice.id
+}
+
+resource "openai_organization_role" "auditor" {
+  name        = "auditor"
+  description = "Read-only organization auditor"
+  permissions = ["organization.users.read"]
+}
+
+resource "openai_organization_group_role" "engineering_auditor" {
+  group_id = openai_organization_group.engineering.id
+  role_id  = openai_organization_role.auditor.id
+}
+```
+
+Admin API keys and critical access roles should use Terraform lifecycle
+protection such as `prevent_destroy` when accidental removal would lock out
+automation or operators.
+
 ## Quick Start
 
 ## Development
@@ -185,6 +230,14 @@ See:
 - `examples/resources/openai_project/`
 - `examples/resources/openai_service_account/`
 - `examples/resources/openai_project_api_key/`
+- `examples/resources/openai_admin_api_key/`
+- `examples/resources/openai_organization_group/`
+- `examples/resources/openai_organization_group_user/`
+- `examples/resources/openai_organization_role/`
+- `examples/resources/openai_organization_user_role/`
+- `examples/resources/openai_organization_group_role/`
+- `examples/resources/openai_project_role/`
+- `examples/data-sources/`
 
 
 

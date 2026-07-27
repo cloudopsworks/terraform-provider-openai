@@ -286,3 +286,262 @@ func TestErrorHelpersWithNonAPIError(t *testing.T) {
 type assertErr string
 
 func (e assertErr) Error() string { return string(e) }
+
+func TestOpenAIAdminClientAdminAPIKeyLifecycle(t *testing.T) {
+	cl := testClient(func(r *http.Request) (*http.Response, error) {
+		switch r.Method + " " + r.URL.Path {
+		case "POST /organization/admin_api_keys":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["name"] != "admin-key" || body["expires_in_seconds"] != float64(3600) {
+				t.Fatalf("unexpected admin key create body: %#v", body)
+			}
+			return jsonResponse(adminAPIKeyJSON("admin_key_1", "admin-key", "sk-admin-created")), nil
+		case "GET /organization/admin_api_keys/admin_key_1":
+			return jsonResponse(adminAPIKeyJSON("admin_key_1", "admin-key", "")), nil
+		case "GET /organization/admin_api_keys":
+			if got := r.URL.Query().Get("after"); got != "admin_key_0" {
+				t.Fatalf("after query = %q", got)
+			}
+			if got := r.URL.Query().Get("limit"); got != "2" {
+				t.Fatalf("limit query = %q", got)
+			}
+			if got := r.URL.Query().Get("order"); got != "desc" {
+				t.Fatalf("order query = %q", got)
+			}
+			return jsonResponse(map[string]any{"data": []map[string]any{adminAPIKeyJSON("admin_key_1", "admin-key", "")}, "has_more": false}), nil
+		case "DELETE /organization/admin_api_keys/admin_key_1":
+			return jsonResponse(map[string]any{"id": "admin_key_1", "deleted": true}), nil
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		return nil, nil
+	})
+
+	created, err := cl.CreateAdminAPIKey(context.Background(), AdminAPIKeyCreateRequest{Name: "admin-key", ExpiresInSeconds: 3600})
+	if err != nil || created.Value != "sk-admin-created" || created.OwnerID != "user_1" {
+		t.Fatalf("CreateAdminAPIKey() = %#v, %v", created, err)
+	}
+	got, err := cl.GetAdminAPIKey(context.Background(), "admin_key_1")
+	if err != nil || got.RedactedValue != "sk-admin..." {
+		t.Fatalf("GetAdminAPIKey() = %#v, %v", got, err)
+	}
+	list, err := cl.ListAdminAPIKeys(context.Background(), AdminAPIKeyListRequest{After: "admin_key_0", Limit: 2, Order: "desc"})
+	if err != nil || len(list.Items) != 1 || list.LastID != "admin_key_1" {
+		t.Fatalf("ListAdminAPIKeys() = %#v, %v", list, err)
+	}
+	if err := cl.DeleteAdminAPIKey(context.Background(), "admin_key_1"); err != nil {
+		t.Fatalf("DeleteAdminAPIKey() = %v", err)
+	}
+}
+
+func TestOpenAIAdminClientOrganizationIdentitySurfaces(t *testing.T) {
+	cl := testClient(func(r *http.Request) (*http.Response, error) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /organization/users/user_1":
+			return jsonResponse(organizationUserJSON("user_1")), nil
+		case "GET /organization/users":
+			if got := r.URL.Query()["emails[]"]; len(got) != 1 || got[0] != "user@example.com" {
+				t.Fatalf("emails query = %#v raw=%s", r.URL.Query(), r.URL.RawQuery)
+			}
+			return jsonResponse(map[string]any{"data": []map[string]any{organizationUserJSON("user_1")}, "has_more": false, "last_id": "user_1"}), nil
+		case "POST /organization/groups":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["name"] != "Engineering" {
+				t.Fatalf("unexpected group create body: %#v", body)
+			}
+			return jsonResponse(groupJSON("group_1", "Engineering")), nil
+		case "GET /organization/groups/group_1":
+			return jsonResponse(groupJSON("group_1", "Engineering")), nil
+		case "GET /organization/groups":
+			return jsonResponse(map[string]any{"data": []map[string]any{groupJSON("group_1", "Engineering")}, "has_more": false, "next": ""}), nil
+		case "POST /organization/groups/group_1":
+			return jsonResponse(map[string]any{"id": "group_1", "name": "Platform", "is_scim_managed": false, "created_at": 10}), nil
+		case "DELETE /organization/groups/group_1":
+			return jsonResponse(map[string]any{"id": "group_1", "deleted": true}), nil
+		case "POST /organization/groups/group_1/users":
+			return jsonResponse(map[string]any{"group_id": "group_1", "user_id": "user_1"}), nil
+		case "GET /organization/groups/group_1/users/user_1":
+			return jsonResponse(groupUserJSON("user_1")), nil
+		case "GET /organization/groups/group_1/users":
+			return jsonResponse(map[string]any{"data": []map[string]any{{"id": "user_1", "name": "User", "email": "user@example.com"}}, "has_more": false}), nil
+		case "DELETE /organization/groups/group_1/users/user_1":
+			return jsonResponse(map[string]any{"deleted": true}), nil
+		case "POST /organization/roles":
+			return jsonResponse(roleJSON("role_1", "OrgRole", "api.organization")), nil
+		case "GET /organization/roles/role_1":
+			return jsonResponse(roleJSON("role_1", "OrgRole", "api.organization")), nil
+		case "GET /organization/roles":
+			return jsonResponse(map[string]any{"data": []map[string]any{roleJSON("role_1", "OrgRole", "api.organization")}, "has_more": false}), nil
+		case "POST /organization/roles/role_1":
+			return jsonResponse(roleJSON("role_1", "OrgRoleUpdated", "api.organization")), nil
+		case "DELETE /organization/roles/role_1":
+			return jsonResponse(map[string]any{"id": "role_1", "deleted": true}), nil
+		case "POST /projects/proj_1/roles":
+			return jsonResponse(roleJSON("role_project_1", "ProjectRole", "api.project")), nil
+		case "GET /projects/proj_1/roles/role_project_1":
+			return jsonResponse(roleJSON("role_project_1", "ProjectRole", "api.project")), nil
+		case "GET /projects/proj_1/roles":
+			return jsonResponse(map[string]any{"data": []map[string]any{roleJSON("role_project_1", "ProjectRole", "api.project")}, "has_more": false}), nil
+		case "POST /projects/proj_1/roles/role_project_1":
+			return jsonResponse(roleJSON("role_project_1", "ProjectRoleUpdated", "api.project")), nil
+		case "DELETE /projects/proj_1/roles/role_project_1":
+			return jsonResponse(map[string]any{"id": "role_project_1", "deleted": true}), nil
+		case "POST /organization/users/user_1/roles":
+			return jsonResponse(map[string]any{"object": "user.role", "role": roleJSON("role_1", "OrgRole", "api.organization"), "user": organizationUserJSON("user_1")}), nil
+		case "GET /organization/users/user_1/roles/role_1":
+			return jsonResponse(roleAssignmentJSON("role_1", "OrgRole", "api.organization")), nil
+		case "GET /organization/users/user_1/roles":
+			return jsonResponse(map[string]any{"data": []map[string]any{roleAssignmentJSON("role_1", "OrgRole", "api.organization")}, "has_more": false}), nil
+		case "DELETE /organization/users/user_1/roles/role_1":
+			return jsonResponse(map[string]any{"deleted": true, "object": "user.role.deleted"}), nil
+		case "POST /organization/groups/group_1/roles":
+			return jsonResponse(map[string]any{"object": "group.role", "role": roleJSON("role_1", "OrgRole", "api.organization"), "group": groupJSON("group_1", "Engineering")}), nil
+		case "GET /organization/groups/group_1/roles/role_1":
+			return jsonResponse(roleAssignmentJSON("role_1", "OrgRole", "api.organization")), nil
+		case "GET /organization/groups/group_1/roles":
+			return jsonResponse(map[string]any{"data": []map[string]any{roleAssignmentJSON("role_1", "OrgRole", "api.organization")}, "has_more": false}), nil
+		case "DELETE /organization/groups/group_1/roles/role_1":
+			return jsonResponse(map[string]any{"deleted": true, "object": "group.role.deleted"}), nil
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		return nil, nil
+	})
+
+	if user, err := cl.GetOrganizationUser(context.Background(), "user_1"); err != nil || user.Email != "user@example.com" {
+		t.Fatalf("GetOrganizationUser() = %#v, %v", user, err)
+	}
+	if users, err := cl.ListOrganizationUsers(context.Background(), OrganizationUserListRequest{Emails: []string{"user@example.com"}}); err != nil || len(users.Items) != 1 {
+		t.Fatalf("ListOrganizationUsers() = %#v, %v", users, err)
+	}
+	if group, err := cl.CreateOrganizationGroup(context.Background(), OrganizationGroupCreateRequest{Name: "Engineering"}); err != nil || group.ID != "group_1" {
+		t.Fatalf("CreateOrganizationGroup() = %#v, %v", group, err)
+	}
+	if group, err := cl.GetOrganizationGroup(context.Background(), "group_1"); err != nil || group.Name != "Engineering" {
+		t.Fatalf("GetOrganizationGroup() = %#v, %v", group, err)
+	}
+	if groups, err := cl.ListOrganizationGroups(context.Background(), OrganizationGroupListRequest{}); err != nil || len(groups.Items) != 1 {
+		t.Fatalf("ListOrganizationGroups() = %#v, %v", groups, err)
+	}
+	if group, err := cl.UpdateOrganizationGroup(context.Background(), "group_1", OrganizationGroupUpdateRequest{Name: "Platform"}); err != nil || group.Name != "Platform" {
+		t.Fatalf("UpdateOrganizationGroup() = %#v, %v", group, err)
+	}
+	if err := cl.DeleteOrganizationGroup(context.Background(), "group_1"); err != nil {
+		t.Fatalf("DeleteOrganizationGroup() = %v", err)
+	}
+	if member, err := cl.CreateOrganizationGroupUser(context.Background(), "group_1", OrganizationGroupUserCreateRequest{UserID: "user_1"}); err != nil || member.ID != "user_1" {
+		t.Fatalf("CreateOrganizationGroupUser() = %#v, %v", member, err)
+	}
+	if member, err := cl.GetOrganizationGroupUser(context.Background(), "group_1", "user_1"); err != nil || member.UserType != "user" {
+		t.Fatalf("GetOrganizationGroupUser() = %#v, %v", member, err)
+	}
+	if members, err := cl.ListOrganizationGroupUsers(context.Background(), "group_1", OrganizationGroupUserListRequest{}); err != nil || len(members.Items) != 1 {
+		t.Fatalf("ListOrganizationGroupUsers() = %#v, %v", members, err)
+	}
+	if err := cl.DeleteOrganizationGroupUser(context.Background(), "group_1", "user_1"); err != nil {
+		t.Fatalf("DeleteOrganizationGroupUser() = %v", err)
+	}
+	if role, err := cl.CreateOrganizationRole(context.Background(), RoleCreateRequest{Name: "OrgRole", Permissions: []string{"organization.users.read"}}); err != nil || role.ResourceType != "api.organization" {
+		t.Fatalf("CreateOrganizationRole() = %#v, %v", role, err)
+	}
+	if role, err := cl.GetOrganizationRole(context.Background(), "role_1"); err != nil || role.Name != "OrgRole" {
+		t.Fatalf("GetOrganizationRole() = %#v, %v", role, err)
+	}
+	if roles, err := cl.ListOrganizationRoles(context.Background(), RoleListRequest{}); err != nil || len(roles.Items) != 1 {
+		t.Fatalf("ListOrganizationRoles() = %#v, %v", roles, err)
+	}
+	if role, err := cl.UpdateOrganizationRole(context.Background(), "role_1", RoleUpdateRequest{Name: "OrgRoleUpdated"}); err != nil || role.Name != "OrgRoleUpdated" {
+		t.Fatalf("UpdateOrganizationRole() = %#v, %v", role, err)
+	}
+	if err := cl.DeleteOrganizationRole(context.Background(), "role_1"); err != nil {
+		t.Fatalf("DeleteOrganizationRole() = %v", err)
+	}
+	if role, err := cl.CreateProjectRole(context.Background(), "proj_1", RoleCreateRequest{Name: "ProjectRole", Permissions: []string{"project.api_keys.read"}}); err != nil || role.ResourceType != "api.project" {
+		t.Fatalf("CreateProjectRole() = %#v, %v", role, err)
+	}
+	if role, err := cl.GetProjectRole(context.Background(), "proj_1", "role_project_1"); err != nil || role.Name != "ProjectRole" {
+		t.Fatalf("GetProjectRole() = %#v, %v", role, err)
+	}
+	if roles, err := cl.ListProjectRoles(context.Background(), "proj_1", RoleListRequest{}); err != nil || len(roles.Items) != 1 {
+		t.Fatalf("ListProjectRoles() = %#v, %v", roles, err)
+	}
+	if role, err := cl.UpdateProjectRole(context.Background(), "proj_1", "role_project_1", RoleUpdateRequest{Name: "ProjectRoleUpdated"}); err != nil || role.Name != "ProjectRoleUpdated" {
+		t.Fatalf("UpdateProjectRole() = %#v, %v", role, err)
+	}
+	if err := cl.DeleteProjectRole(context.Background(), "proj_1", "role_project_1"); err != nil {
+		t.Fatalf("DeleteProjectRole() = %v", err)
+	}
+	if assignment, err := cl.CreateOrganizationUserRole(context.Background(), "user_1", RoleAssignmentCreateRequest{RoleID: "role_1"}); err != nil || assignment.PrincipalType != "user" {
+		t.Fatalf("CreateOrganizationUserRole() = %#v, %v", assignment, err)
+	}
+	if assignment, err := cl.GetOrganizationUserRole(context.Background(), "user_1", "role_1"); err != nil || assignment.CreatedBy != "user_1" {
+		t.Fatalf("GetOrganizationUserRole() = %#v, %v", assignment, err)
+	}
+	if assignments, err := cl.ListOrganizationUserRoles(context.Background(), "user_1", RoleAssignmentListRequest{}); err != nil || len(assignments.Items) != 1 {
+		t.Fatalf("ListOrganizationUserRoles() = %#v, %v", assignments, err)
+	}
+	if err := cl.DeleteOrganizationUserRole(context.Background(), "user_1", "role_1"); err != nil {
+		t.Fatalf("DeleteOrganizationUserRole() = %v", err)
+	}
+	if assignment, err := cl.CreateOrganizationGroupRole(context.Background(), "group_1", RoleAssignmentCreateRequest{RoleID: "role_1"}); err != nil || assignment.PrincipalType != "group" {
+		t.Fatalf("CreateOrganizationGroupRole() = %#v, %v", assignment, err)
+	}
+	if assignment, err := cl.GetOrganizationGroupRole(context.Background(), "group_1", "role_1"); err != nil || assignment.ID != "role_1" {
+		t.Fatalf("GetOrganizationGroupRole() = %#v, %v", assignment, err)
+	}
+	if assignments, err := cl.ListOrganizationGroupRoles(context.Background(), "group_1", RoleAssignmentListRequest{}); err != nil || len(assignments.Items) != 1 {
+		t.Fatalf("ListOrganizationGroupRoles() = %#v, %v", assignments, err)
+	}
+	if err := cl.DeleteOrganizationGroupRole(context.Background(), "group_1", "role_1"); err != nil {
+		t.Fatalf("DeleteOrganizationGroupRole() = %v", err)
+	}
+}
+
+func adminAPIKeyJSON(id, name, value string) map[string]any {
+	body := map[string]any{"id": id, "name": name, "redacted_value": "sk-admin...", "created_at": 21, "expires_at": 0, "last_used_at": 0, "owner": map[string]any{"type": "user", "id": "user_1", "name": "Owner", "role": "owner"}}
+	if value != "" {
+		body["value"] = value
+	}
+	return body
+}
+
+func organizationUserJSON(id string) map[string]any {
+	return map[string]any{
+		"id": id, "name": "User", "email": "user@example.com", "role": "reader", "added_at": 22,
+		"user":     map[string]any{"id": id, "name": "User", "email": "user@example.com", "enabled": true},
+		"projects": map[string]any{"data": []map[string]any{{"id": "proj_1", "name": "Project", "role": "member"}}},
+	}
+}
+
+func groupJSON(id, name string) map[string]any {
+	return map[string]any{"id": id, "name": name, "group_type": "group", "is_scim_managed": false, "created_at": 23}
+}
+
+func groupUserJSON(id string) map[string]any {
+	return map[string]any{"id": id, "name": "User", "email": "user@example.com", "is_service_account": false, "picture": "", "user_type": "user"}
+}
+
+func roleJSON(id, name, resourceType string) map[string]any {
+	permission := "organization.users.read"
+	if resourceType == "api.project" {
+		permission = "project.api_keys.read"
+	}
+	return map[string]any{"id": id, "name": name, "description": "role", "permissions": []string{permission}, "predefined_role": false, "resource_type": resourceType}
+}
+
+func roleAssignmentJSON(id, name, resourceType string) map[string]any {
+	body := roleJSON(id, name, resourceType)
+	body["assignment_sources"] = []map[string]any{{"principal_id": "group_1", "principal_type": "group"}}
+	body["created_at"] = 24
+	body["updated_at"] = 25
+	body["created_by"] = "user_1"
+	body["created_by_user_obj"] = map[string]any{}
+	body["metadata"] = map[string]any{}
+	return body
+}

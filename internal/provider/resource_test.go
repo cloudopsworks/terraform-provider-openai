@@ -187,6 +187,193 @@ func (f *fakeAdminClient) DeleteProjectAPIKey(ctx context.Context, projectID, ap
 	return nil
 }
 
+func (f *fakeAdminClient) CreateAdminAPIKey(ctx context.Context, req client.AdminAPIKeyCreateRequest) (*client.AdminAPIKey, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.AdminAPIKey{ID: "admin_key_1", Name: req.Name, Value: "sk-admin-created", RedactedValue: "sk-admin...", OwnerType: "user", OwnerID: "user_1", OwnerName: "Owner", OwnerRole: "owner", CreatedAt: 21}, nil
+}
+func (f *fakeAdminClient) GetAdminAPIKey(ctx context.Context, id string) (*client.AdminAPIKey, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.AdminAPIKey{ID: id, Name: "admin-key", RedactedValue: "sk-admin...", OwnerType: "user", OwnerID: "user_1", OwnerName: "Owner", OwnerRole: "owner", CreatedAt: 21}, nil
+}
+func (f *fakeAdminClient) ListAdminAPIKeys(ctx context.Context, req client.AdminAPIKeyListRequest) (*client.AdminAPIKeyListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.AdminAPIKeyListResponse{Items: []client.AdminAPIKey{{ID: "admin_key_1", Name: "admin-key", RedactedValue: "sk-admin...", OwnerType: "user", OwnerID: "user_1", OwnerName: "Owner", OwnerRole: "owner", CreatedAt: 21}}, LastID: "admin_key_1"}, nil
+}
+func (f *fakeAdminClient) DeleteAdminAPIKey(ctx context.Context, id string) error {
+	return f.err
+}
+func (f *fakeAdminClient) GetOrganizationUser(ctx context.Context, userID string) (*client.OrganizationUser, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.OrganizationUser{ID: userID, Name: "User", Email: "user@example.com", Role: "reader", UserID: userID, UserName: "User", UserEmail: "user@example.com", AddedAt: 22}, nil
+}
+func (f *fakeAdminClient) ListOrganizationUsers(ctx context.Context, req client.OrganizationUserListRequest) (*client.OrganizationUserListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.OrganizationUserListResponse{Items: []client.OrganizationUser{{ID: "user_1", Name: "User", Email: "user@example.com", Role: "reader", UserID: "user_1", AddedAt: 22}}, LastID: "user_1"}, nil
+}
+func (f *fakeAdminClient) UpdateOrganizationUser(ctx context.Context, userID string, req client.OrganizationUserUpdateRequest) (*client.OrganizationUser, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.OrganizationUser{ID: userID, Role: req.Role, UserID: userID}, nil
+}
+func (f *fakeAdminClient) DeleteOrganizationUser(ctx context.Context, userID string) error {
+	return f.err
+}
+func (f *fakeAdminClient) CreateOrganizationGroup(ctx context.Context, req client.OrganizationGroupCreateRequest) (*client.OrganizationGroup, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.OrganizationGroup{ID: "group_1", Name: req.Name, GroupType: "group", CreatedAt: 23}, nil
+}
+func (f *fakeAdminClient) GetOrganizationGroup(ctx context.Context, groupID string) (*client.OrganizationGroup, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.OrganizationGroup{ID: groupID, Name: "Group", GroupType: "group", CreatedAt: 23}, nil
+}
+func (f *fakeAdminClient) ListOrganizationGroups(ctx context.Context, req client.OrganizationGroupListRequest) (*client.OrganizationGroupListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.OrganizationGroupListResponse{Items: []client.OrganizationGroup{{ID: "group_1", Name: "Group", GroupType: "group", CreatedAt: 23}}, Next: "group_1"}, nil
+}
+func (f *fakeAdminClient) UpdateOrganizationGroup(ctx context.Context, groupID string, req client.OrganizationGroupUpdateRequest) (*client.OrganizationGroup, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.OrganizationGroup{ID: groupID, Name: req.Name, GroupType: "group", CreatedAt: 23}, nil
+}
+func (f *fakeAdminClient) DeleteOrganizationGroup(ctx context.Context, groupID string) error {
+	return f.err
+}
+func (f *fakeAdminClient) CreateOrganizationGroupUser(ctx context.Context, groupID string, req client.OrganizationGroupUserCreateRequest) (*client.OrganizationGroupUser, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.OrganizationGroupUser{ID: req.UserID, Name: "User", Email: "user@example.com", UserType: "user"}, nil
+}
+func (f *fakeAdminClient) GetOrganizationGroupUser(ctx context.Context, groupID, userID string) (*client.OrganizationGroupUser, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.OrganizationGroupUser{ID: userID, Name: "User", Email: "user@example.com", UserType: "user"}, nil
+}
+func (f *fakeAdminClient) ListOrganizationGroupUsers(ctx context.Context, groupID string, req client.OrganizationGroupUserListRequest) (*client.OrganizationGroupUserListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.OrganizationGroupUserListResponse{Items: []client.OrganizationGroupUser{{ID: "user_1", Name: "User", Email: "user@example.com", UserType: "user"}}, Next: "user_1"}, nil
+}
+func (f *fakeAdminClient) DeleteOrganizationGroupUser(ctx context.Context, groupID, userID string) error {
+	return f.err
+}
+func (f *fakeAdminClient) CreateOrganizationRole(ctx context.Context, req client.RoleCreateRequest) (*client.Role, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.Role{ID: "role_1", Name: req.Name, Description: req.Description, Permissions: req.Permissions, ResourceType: "api.organization"}, nil
+}
+func (f *fakeAdminClient) GetOrganizationRole(ctx context.Context, roleID string) (*client.Role, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.Role{ID: roleID, Name: "Role", Description: "role", Permissions: []string{"organization.users.read"}, ResourceType: "api.organization"}, nil
+}
+func (f *fakeAdminClient) ListOrganizationRoles(ctx context.Context, req client.RoleListRequest) (*client.RoleListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.RoleListResponse{Items: []client.Role{{ID: "role_1", Name: "Role", Permissions: []string{"organization.users.read"}, ResourceType: "api.organization"}}, Next: "role_1"}, nil
+}
+func (f *fakeAdminClient) UpdateOrganizationRole(ctx context.Context, roleID string, req client.RoleUpdateRequest) (*client.Role, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.Role{ID: roleID, Name: req.Name, Description: req.Description, Permissions: req.Permissions, ResourceType: "api.organization"}, nil
+}
+func (f *fakeAdminClient) DeleteOrganizationRole(ctx context.Context, roleID string) error {
+	return f.err
+}
+func (f *fakeAdminClient) CreateProjectRole(ctx context.Context, projectID string, req client.RoleCreateRequest) (*client.Role, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.Role{ID: "role_1", Name: req.Name, Description: req.Description, Permissions: req.Permissions, ResourceType: "api.project"}, nil
+}
+func (f *fakeAdminClient) GetProjectRole(ctx context.Context, projectID, roleID string) (*client.Role, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.Role{ID: roleID, Name: "Role", Description: "role", Permissions: []string{"project.api_keys.read"}, ResourceType: "api.project"}, nil
+}
+func (f *fakeAdminClient) ListProjectRoles(ctx context.Context, projectID string, req client.RoleListRequest) (*client.RoleListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.RoleListResponse{Items: []client.Role{{ID: "role_1", Name: "Role", Permissions: []string{"project.api_keys.read"}, ResourceType: "api.project"}}, Next: "role_1"}, nil
+}
+func (f *fakeAdminClient) UpdateProjectRole(ctx context.Context, projectID, roleID string, req client.RoleUpdateRequest) (*client.Role, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.Role{ID: roleID, Name: req.Name, Description: req.Description, Permissions: req.Permissions, ResourceType: "api.project"}, nil
+}
+func (f *fakeAdminClient) DeleteProjectRole(ctx context.Context, projectID, roleID string) error {
+	return f.err
+}
+func (f *fakeAdminClient) CreateOrganizationUserRole(ctx context.Context, userID string, req client.RoleAssignmentCreateRequest) (*client.RoleAssignment, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.RoleAssignment{Role: client.Role{ID: req.RoleID, Name: "Role", Permissions: []string{"organization.users.read"}, ResourceType: "api.organization"}, PrincipalID: userID, PrincipalType: "user"}, nil
+}
+func (f *fakeAdminClient) GetOrganizationUserRole(ctx context.Context, userID, roleID string) (*client.RoleAssignment, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.RoleAssignment{Role: client.Role{ID: roleID, Name: "Role", Permissions: []string{"organization.users.read"}, ResourceType: "api.organization"}, PrincipalID: userID, PrincipalType: "user", CreatedAt: 24}, nil
+}
+func (f *fakeAdminClient) ListOrganizationUserRoles(ctx context.Context, userID string, req client.RoleAssignmentListRequest) (*client.RoleAssignmentListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.RoleAssignmentListResponse{Items: []client.RoleAssignment{{Role: client.Role{ID: "role_1", Name: "Role", Permissions: []string{"organization.users.read"}, ResourceType: "api.organization"}, PrincipalID: userID, PrincipalType: "user"}}, Next: "role_1"}, nil
+}
+func (f *fakeAdminClient) DeleteOrganizationUserRole(ctx context.Context, userID, roleID string) error {
+	return f.err
+}
+func (f *fakeAdminClient) CreateOrganizationGroupRole(ctx context.Context, groupID string, req client.RoleAssignmentCreateRequest) (*client.RoleAssignment, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.RoleAssignment{Role: client.Role{ID: req.RoleID, Name: "Role", Permissions: []string{"organization.users.read"}, ResourceType: "api.organization"}, PrincipalID: groupID, PrincipalType: "group"}, nil
+}
+func (f *fakeAdminClient) GetOrganizationGroupRole(ctx context.Context, groupID, roleID string) (*client.RoleAssignment, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.RoleAssignment{Role: client.Role{ID: roleID, Name: "Role", Permissions: []string{"organization.users.read"}, ResourceType: "api.organization"}, PrincipalID: groupID, PrincipalType: "group", CreatedAt: 24}, nil
+}
+func (f *fakeAdminClient) ListOrganizationGroupRoles(ctx context.Context, groupID string, req client.RoleAssignmentListRequest) (*client.RoleAssignmentListResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &client.RoleAssignmentListResponse{Items: []client.RoleAssignment{{Role: client.Role{ID: "role_1", Name: "Role", Permissions: []string{"organization.users.read"}, ResourceType: "api.organization"}, PrincipalID: groupID, PrincipalType: "group"}}, Next: "role_1"}, nil
+}
+func (f *fakeAdminClient) DeleteOrganizationGroupRole(ctx context.Context, groupID, roleID string) error {
+	return f.err
+}
+
 func TestProjectResourceLifecycleWithMockClient(t *testing.T) {
 	ctx := context.Background()
 	fake := &fakeAdminClient{}
@@ -960,4 +1147,149 @@ func dataSourceSchema(ctx context.Context, t *testing.T, ds datasource.DataSourc
 		t.Fatalf("schema diagnostics: %v", resp.Diagnostics)
 	}
 	return resp.Schema
+}
+
+func TestAdminAPIKeyResourceWithMockClient(t *testing.T) {
+	ctx := context.Background()
+	r := &adminAPIKeyResource{client: &fakeAdminClient{}}
+	schema := resourceSchema(ctx, t, r)
+	plan := tfsdk.Plan{Schema: schema}
+	if diags := plan.Set(ctx, &adminAPIKeyResourceModel{Name: types.StringValue("admin-key"), ExpiresInSeconds: types.Int64Value(3600)}); diags.HasError() {
+		t.Fatalf("plan set: %v", diags)
+	}
+	createResp := resource.CreateResponse{State: tfsdk.State{Schema: schema}}
+	r.Create(ctx, resource.CreateRequest{Plan: plan}, &createResp)
+	if createResp.Diagnostics.HasError() {
+		t.Fatalf("create diagnostics: %v", createResp.Diagnostics)
+	}
+	var state adminAPIKeyResourceModel
+	if diags := createResp.State.Get(ctx, &state); diags.HasError() {
+		t.Fatalf("state get: %v", diags)
+	}
+	if state.ID.ValueString() != "admin_key_1" || state.Value.ValueString() != "sk-admin-created" || state.RedactedValue.ValueString() != "sk-admin..." {
+		t.Fatalf("unexpected admin key state: %#v", state)
+	}
+	readResp := resource.ReadResponse{State: createResp.State}
+	r.Read(ctx, resource.ReadRequest{State: createResp.State}, &readResp)
+	if readResp.Diagnostics.HasError() {
+		t.Fatalf("read diagnostics: %v", readResp.Diagnostics)
+	}
+	deleteResp := resource.DeleteResponse{State: readResp.State}
+	r.Delete(ctx, resource.DeleteRequest{State: readResp.State}, &deleteResp)
+	if deleteResp.Diagnostics.HasError() {
+		t.Fatalf("delete diagnostics: %v", deleteResp.Diagnostics)
+	}
+}
+
+func TestOrganizationAccessResourcesWithMockClient(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeAdminClient{}
+
+	groupResource := &organizationGroupResource{client: fake}
+	groupSchema := resourceSchema(ctx, t, groupResource)
+	groupPlan := tfsdk.Plan{Schema: groupSchema}
+	if diags := groupPlan.Set(ctx, &organizationGroupResourceModel{Name: types.StringValue("Engineering")}); diags.HasError() {
+		t.Fatalf("group plan set: %v", diags)
+	}
+	groupCreate := resource.CreateResponse{State: tfsdk.State{Schema: groupSchema}}
+	groupResource.Create(ctx, resource.CreateRequest{Plan: groupPlan}, &groupCreate)
+	if groupCreate.Diagnostics.HasError() {
+		t.Fatalf("group create diagnostics: %v", groupCreate.Diagnostics)
+	}
+	var groupState organizationGroupResourceModel
+	if diags := groupCreate.State.Get(ctx, &groupState); diags.HasError() {
+		t.Fatalf("group state get: %v", diags)
+	}
+	if groupState.ID.ValueString() != "group_1" || groupState.Name.ValueString() != "Engineering" {
+		t.Fatalf("unexpected group state: %#v", groupState)
+	}
+
+	permissions, diags := types.SetValueFrom(ctx, types.StringType, []string{"organization.users.read"})
+	if diags.HasError() {
+		t.Fatalf("permissions: %v", diags)
+	}
+	roleResource := &organizationRoleResource{client: fake}
+	roleSchema := resourceSchema(ctx, t, roleResource)
+	rolePlan := tfsdk.Plan{Schema: roleSchema}
+	if diags := rolePlan.Set(ctx, &organizationRoleResourceModel{Name: types.StringValue("auditor"), Description: types.StringValue("Auditor"), Permissions: permissions}); diags.HasError() {
+		t.Fatalf("role plan set: %v", diags)
+	}
+	roleCreate := resource.CreateResponse{State: tfsdk.State{Schema: roleSchema}}
+	roleResource.Create(ctx, resource.CreateRequest{Plan: rolePlan}, &roleCreate)
+	if roleCreate.Diagnostics.HasError() {
+		t.Fatalf("role create diagnostics: %v", roleCreate.Diagnostics)
+	}
+	var roleState organizationRoleResourceModel
+	if diags := roleCreate.State.Get(ctx, &roleState); diags.HasError() {
+		t.Fatalf("role state get: %v", diags)
+	}
+	if roleState.ID.ValueString() != "role_1" || roleState.ResourceType.ValueString() != "api.organization" {
+		t.Fatalf("unexpected role state: %#v", roleState)
+	}
+
+	memberResource := &organizationGroupUserResource{client: fake}
+	memberSchema := resourceSchema(ctx, t, memberResource)
+	memberPlan := tfsdk.Plan{Schema: memberSchema}
+	if diags := memberPlan.Set(ctx, &organizationGroupUserResourceModel{GroupID: types.StringValue("group_1"), UserID: types.StringValue("user_1")}); diags.HasError() {
+		t.Fatalf("member plan set: %v", diags)
+	}
+	memberCreate := resource.CreateResponse{State: tfsdk.State{Schema: memberSchema}}
+	memberResource.Create(ctx, resource.CreateRequest{Plan: memberPlan}, &memberCreate)
+	if memberCreate.Diagnostics.HasError() {
+		t.Fatalf("member create diagnostics: %v", memberCreate.Diagnostics)
+	}
+	var memberState organizationGroupUserResourceModel
+	if diags := memberCreate.State.Get(ctx, &memberState); diags.HasError() {
+		t.Fatalf("member state get: %v", diags)
+	}
+	if memberState.ID.ValueString() != "group_1/user_1" {
+		t.Fatalf("unexpected member state: %#v", memberState)
+	}
+
+	userRoleResource := &organizationUserRoleResource{client: fake}
+	userRoleSchema := resourceSchema(ctx, t, userRoleResource)
+	userRolePlan := tfsdk.Plan{Schema: userRoleSchema}
+	if diags := userRolePlan.Set(ctx, &organizationUserRoleResourceModel{UserID: types.StringValue("user_1"), RoleID: types.StringValue("role_1"), Permissions: types.SetNull(types.StringType)}); diags.HasError() {
+		t.Fatalf("user role plan set: %v", diags)
+	}
+	userRoleCreate := resource.CreateResponse{State: tfsdk.State{Schema: userRoleSchema}}
+	userRoleResource.Create(ctx, resource.CreateRequest{Plan: userRolePlan}, &userRoleCreate)
+	if userRoleCreate.Diagnostics.HasError() {
+		t.Fatalf("user role create diagnostics: %v", userRoleCreate.Diagnostics)
+	}
+
+	groupRoleResource := &organizationGroupRoleResource{client: fake}
+	groupRoleSchema := resourceSchema(ctx, t, groupRoleResource)
+	groupRolePlan := tfsdk.Plan{Schema: groupRoleSchema}
+	if diags := groupRolePlan.Set(ctx, &organizationGroupRoleResourceModel{GroupID: types.StringValue("group_1"), RoleID: types.StringValue("role_1"), Permissions: types.SetNull(types.StringType)}); diags.HasError() {
+		t.Fatalf("group role plan set: %v", diags)
+	}
+	groupRoleCreate := resource.CreateResponse{State: tfsdk.State{Schema: groupRoleSchema}}
+	groupRoleResource.Create(ctx, resource.CreateRequest{Plan: groupRolePlan}, &groupRoleCreate)
+	if groupRoleCreate.Diagnostics.HasError() {
+		t.Fatalf("group role create diagnostics: %v", groupRoleCreate.Diagnostics)
+	}
+
+	projectPermissions, diags := types.SetValueFrom(ctx, types.StringType, []string{"project.api_keys.read"})
+	if diags.HasError() {
+		t.Fatalf("project permissions: %v", diags)
+	}
+	projectRoleResource := &projectRoleResource{client: fake}
+	projectRoleSchema := resourceSchema(ctx, t, projectRoleResource)
+	projectRolePlan := tfsdk.Plan{Schema: projectRoleSchema}
+	if diags := projectRolePlan.Set(ctx, &projectRoleResourceModel{ProjectID: types.StringValue("proj_1"), Name: types.StringValue("api-key-reader"), Permissions: projectPermissions}); diags.HasError() {
+		t.Fatalf("project role plan set: %v", diags)
+	}
+	projectRoleCreate := resource.CreateResponse{State: tfsdk.State{Schema: projectRoleSchema}}
+	projectRoleResource.Create(ctx, resource.CreateRequest{Plan: projectRolePlan}, &projectRoleCreate)
+	if projectRoleCreate.Diagnostics.HasError() {
+		t.Fatalf("project role create diagnostics: %v", projectRoleCreate.Diagnostics)
+	}
+	var projectRoleState projectRoleResourceModel
+	if diags := projectRoleCreate.State.Get(ctx, &projectRoleState); diags.HasError() {
+		t.Fatalf("project role state get: %v", diags)
+	}
+	if projectRoleState.ResourceType.ValueString() != "api.project" {
+		t.Fatalf("unexpected project role state: %#v", projectRoleState)
+	}
 }
