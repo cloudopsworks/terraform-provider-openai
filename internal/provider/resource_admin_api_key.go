@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -129,6 +130,10 @@ func (r *adminAPIKeyResource) Read(ctx context.Context, req resource.ReadRequest
 		addClientError(&resp.Diagnostics, "Unable to read OpenAI admin API key", err)
 		return
 	}
+	if adminAPIKeyExpired(apiKey, time.Now()) {
+		resp.State.RemoveResource(ctx)
+		return
+	}
 	newState := adminAPIKeyResourceModelFromAPI(apiKey, state)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &newState)...)
 }
@@ -177,6 +182,10 @@ func adminAPIKeyResourceModelFromAPI(apiKey *client.AdminAPIKey, prior adminAPIK
 		ExpiresAt:        int64OrNull(apiKey.ExpiresAt),
 		LastUsedAt:       int64OrNull(apiKey.LastUsedAt),
 	}
+}
+
+func adminAPIKeyExpired(apiKey *client.AdminAPIKey, now time.Time) bool {
+	return apiKey != nil && apiKey.ExpiresAt > 0 && apiKey.ExpiresAt <= now.Unix()
 }
 
 type adminAPIKeyExpirationInput struct {

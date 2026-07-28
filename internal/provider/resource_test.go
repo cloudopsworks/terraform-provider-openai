@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/openai/openai-go/v3"
 
@@ -47,6 +48,7 @@ type fakeAdminClient struct {
 	archiveProjectErr       error
 	deletedAccount          string
 	deletedKey              string
+	adminAPIKey             *client.AdminAPIKey
 	createdAdminAPIKeyReq   client.AdminAPIKeyCreateRequest
 	deletedAdminAPIKey      string
 	invite                  *client.Invite
@@ -231,6 +233,9 @@ func (f *fakeAdminClient) CreateAdminAPIKey(ctx context.Context, req client.Admi
 func (f *fakeAdminClient) GetAdminAPIKey(ctx context.Context, id string) (*client.AdminAPIKey, error) {
 	if f.err != nil {
 		return nil, f.err
+	}
+	if f.adminAPIKey != nil {
+		return f.adminAPIKey, nil
 	}
 	return &client.AdminAPIKey{ID: id, Name: "admin-key", RedactedValue: "sk-admin...", OwnerType: "user", OwnerID: "user_1", OwnerName: "Owner", OwnerRole: "owner", CreatedAt: 21}, nil
 }
@@ -1456,6 +1461,39 @@ func TestProjectAPIKeyResourceLifecycleWithMockClient(t *testing.T) {
 	}
 }
 
+func TestProjectAPIKeyResourceReadRemovesStateWhenRemoteKeyNotFound(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeAdminClient{err: openAINotFoundError()}
+	r := &projectAPIKeyResource{client: fake}
+	schema := resourceSchema(ctx, t, r)
+	state := tfsdk.State{Schema: schema}
+	scopes, diags := setStringValueOrNull(ctx, []string{"models.read"})
+	if diags.HasError() {
+		t.Fatalf("scopes: %v", diags)
+	}
+	if diags := state.Set(ctx, &projectAPIKeyResourceModel{
+		ID:               types.StringValue("key_1"),
+		ProjectID:        types.StringValue("proj_1"),
+		ServiceAccountID: types.StringValue("sa_1"),
+		Name:             types.StringValue("svc-key"),
+		Scopes:           scopes,
+		Value:            types.StringValue("sk-created"),
+		RedactedValue:    types.StringValue("sk-..."),
+		OwnerType:        types.StringValue("service_account"),
+		CreatedAt:        types.Int64Value(12),
+	}); diags.HasError() {
+		t.Fatalf("state set: %v", diags)
+	}
+	readResp := resource.ReadResponse{State: state}
+
+	r.Read(ctx, resource.ReadRequest{State: state}, &readResp)
+
+	if readResp.Diagnostics.HasError() {
+		t.Fatalf("read diagnostics: %v", readResp.Diagnostics)
+	}
+	requireResourceRemoved(t, readResp.State)
+}
+
 func TestResourceClientErrorsAreDiagnostics(t *testing.T) {
 	ctx := context.Background()
 	fake := &fakeAdminClient{err: errors.New("boom")}
@@ -1490,6 +1528,17 @@ func dataSourceSchema(ctx context.Context, t *testing.T, ds datasource.DataSourc
 		t.Fatalf("schema diagnostics: %v", resp.Diagnostics)
 	}
 	return resp.Schema
+}
+
+func openAINotFoundError() error {
+	return &openai.Error{StatusCode: http.StatusNotFound, Message: "not found"}
+}
+
+func requireResourceRemoved(t *testing.T, state tfsdk.State) {
+	t.Helper()
+	if !state.Raw.IsNull() {
+		t.Fatalf("expected resource state to be removed, got %#v", state.Raw)
+	}
 }
 
 func TestAdminAPIKeyResourceWithMockClient(t *testing.T) {
@@ -1530,6 +1579,76 @@ func TestAdminAPIKeyResourceWithMockClient(t *testing.T) {
 	if fake.deletedAdminAPIKey != "admin_key_1" {
 		t.Fatalf("admin key delete id = %q", fake.deletedAdminAPIKey)
 	}
+}
+
+func TestAdminAPIKeyResourceReadRemovesStateWhenRemoteKeyNotFound(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeAdminClient{err: openAINotFoundError()}
+	r := &adminAPIKeyResource{client: fake}
+	schema := resourceSchema(ctx, t, r)
+	state := tfsdk.State{Schema: schema}
+	if diags := state.Set(ctx, &adminAPIKeyResourceModel{
+		ID:               types.StringValue("admin_key_1"),
+		Name:             types.StringValue("admin-key"),
+		ExpiresInSeconds: types.Int64Value(3600),
+		Value:            types.StringValue("sk-admin-created"),
+		RedactedValue:    types.StringValue("sk-admin..."),
+		OwnerType:        types.StringValue("user"),
+		OwnerID:          types.StringValue("user_1"),
+		OwnerName:        types.StringValue("Owner"),
+		OwnerRole:        types.StringValue("owner"),
+		CreatedAt:        types.Int64Value(21),
+	}); diags.HasError() {
+		t.Fatalf("state set: %v", diags)
+	}
+	readResp := resource.ReadResponse{State: state}
+
+	r.Read(ctx, resource.ReadRequest{State: state}, &readResp)
+
+	if readResp.Diagnostics.HasError() {
+		t.Fatalf("read diagnostics: %v", readResp.Diagnostics)
+	}
+	requireResourceRemoved(t, readResp.State)
+}
+
+func TestAdminAPIKeyResourceReadRemovesStateWhenRemoteKeyExpired(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeAdminClient{adminAPIKey: &client.AdminAPIKey{
+		ID:            "admin_key_1",
+		Name:          "admin-key",
+		RedactedValue: "sk-admin...",
+		OwnerType:     "user",
+		OwnerID:       "user_1",
+		OwnerName:     "Owner",
+		OwnerRole:     "owner",
+		CreatedAt:     time.Now().Add(-2 * time.Hour).Unix(),
+		ExpiresAt:     time.Now().Add(-time.Minute).Unix(),
+	}}
+	r := &adminAPIKeyResource{client: fake}
+	schema := resourceSchema(ctx, t, r)
+	state := tfsdk.State{Schema: schema}
+	if diags := state.Set(ctx, &adminAPIKeyResourceModel{
+		ID:               types.StringValue("admin_key_1"),
+		Name:             types.StringValue("admin-key"),
+		ExpiresInSeconds: types.Int64Value(3600),
+		Value:            types.StringValue("sk-admin-created"),
+		RedactedValue:    types.StringValue("sk-admin..."),
+		OwnerType:        types.StringValue("user"),
+		OwnerID:          types.StringValue("user_1"),
+		OwnerName:        types.StringValue("Owner"),
+		OwnerRole:        types.StringValue("owner"),
+		CreatedAt:        types.Int64Value(21),
+	}); diags.HasError() {
+		t.Fatalf("state set: %v", diags)
+	}
+	readResp := resource.ReadResponse{State: state}
+
+	r.Read(ctx, resource.ReadRequest{State: state}, &readResp)
+
+	if readResp.Diagnostics.HasError() {
+		t.Fatalf("read diagnostics: %v", readResp.Diagnostics)
+	}
+	requireResourceRemoved(t, readResp.State)
 }
 
 func TestAdminAPIKeyResourceExpirationUnits(t *testing.T) {
@@ -1782,6 +1901,13 @@ func TestOrganizationDataRetentionAndSpendLimitResourcesWithMockClient(t *testin
 	if retentionResp.Diagnostics.HasError() || fake.updatedDataRetentionReq.Type != "zero_data_retention" {
 		t.Fatalf("retention diagnostics=%v request=%#v", retentionResp.Diagnostics, fake.updatedDataRetentionReq)
 	}
+	retentionMissingResp := resource.ReadResponse{State: retentionResp.State}
+	retentionMissing := &organizationDataRetentionResource{client: &fakeAdminClient{err: openAINotFoundError()}}
+	retentionMissing.Read(ctx, resource.ReadRequest{State: retentionResp.State}, &retentionMissingResp)
+	if retentionMissingResp.Diagnostics.HasError() {
+		t.Fatalf("retention missing diagnostics=%v", retentionMissingResp.Diagnostics)
+	}
+	requireResourceRemoved(t, retentionMissingResp.State)
 
 	limit := &organizationSpendLimitResource{client: fake}
 	limitSchema := resourceSchema(ctx, t, limit)

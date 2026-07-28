@@ -73,6 +73,10 @@ func (r *organizationDataRetentionResource) Create(ctx context.Context, req reso
 func (r *organizationDataRetentionResource) Read(ctx context.Context, _ resource.ReadRequest, resp *resource.ReadResponse) {
 	retention, err := r.client.GetOrganizationDataRetention(ctx)
 	if err != nil {
+		if client.IsNotFound(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		addClientError(&resp.Diagnostics, "Unable to read OpenAI organization data retention", err)
 		return
 	}
