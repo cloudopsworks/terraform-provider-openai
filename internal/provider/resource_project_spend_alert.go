@@ -7,7 +7,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -15,32 +17,34 @@ import (
 )
 
 var (
-	_ resource.Resource                = &organizationSpendAlertResource{}
-	_ resource.ResourceWithConfigure   = &organizationSpendAlertResource{}
-	_ resource.ResourceWithImportState = &organizationSpendAlertResource{}
+	_ resource.Resource                = &projectSpendAlertResource{}
+	_ resource.ResourceWithConfigure   = &projectSpendAlertResource{}
+	_ resource.ResourceWithImportState = &projectSpendAlertResource{}
 )
 
-type organizationSpendAlertResource struct{ client client.AdminClient }
+type projectSpendAlertResource struct{ client client.AdminClient }
 
-type organizationSpendAlertResourceModel struct {
+type projectSpendAlertResourceModel struct {
 	ID                  types.String                       `tfsdk:"id"`
+	ProjectID           types.String                       `tfsdk:"project_id"`
 	ThresholdAmount     types.Int64                        `tfsdk:"threshold_amount"`
 	Currency            types.String                       `tfsdk:"currency"`
 	Interval            types.String                       `tfsdk:"interval"`
 	NotificationChannel spendAlertNotificationChannelModel `tfsdk:"notification_channel"`
 }
 
-func NewOrganizationSpendAlertResource() resource.Resource { return &organizationSpendAlertResource{} }
+func NewProjectSpendAlertResource() resource.Resource { return &projectSpendAlertResource{} }
 
-func (r *organizationSpendAlertResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_organization_spend_alert"
+func (r *projectSpendAlertResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_project_spend_alert"
 }
 
-func (r *organizationSpendAlertResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *projectSpendAlertResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = resourceschema.Schema{
-		MarkdownDescription: "OpenAI organization spend alert. Spend alerts notify email recipients when monthly organization spend reaches the configured threshold amount in cents.",
+		MarkdownDescription: "OpenAI project spend alert. Spend alerts notify email recipients when monthly project spend reaches the configured threshold amount in cents.",
 		Attributes: map[string]resourceschema.Attribute{
 			"id":               resourceschema.StringAttribute{Computed: true, MarkdownDescription: "OpenAI spend alert ID."},
+			"project_id":       resourceschema.StringAttribute{Required: true, MarkdownDescription: "OpenAI project ID that owns the spend alert.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"threshold_amount": resourceschema.Int64Attribute{Required: true, MarkdownDescription: "Alert threshold amount in cents. OpenAI accepts zero or greater."},
 			"currency":         resourceschema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("USD"), MarkdownDescription: "Currency for threshold_amount. OpenAI currently supports USD.", Validators: []validator.String{newStringEnumValidator(spendCurrencies...)}},
 			"interval":         resourceschema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("month"), MarkdownDescription: "Spend evaluation interval. OpenAI currently supports month.", Validators: []validator.String{newStringEnumValidator(spendIntervals...)}},
@@ -53,7 +57,7 @@ func (r *organizationSpendAlertResource) Schema(_ context.Context, _ resource.Sc
 	}
 }
 
-func (r *organizationSpendAlertResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *projectSpendAlertResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -65,8 +69,8 @@ func (r *organizationSpendAlertResource) Configure(_ context.Context, req resour
 	r.client = data.client
 }
 
-func (r *organizationSpendAlertResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan organizationSpendAlertResourceModel
+func (r *projectSpendAlertResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan projectSpendAlertResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -80,12 +84,12 @@ func (r *organizationSpendAlertResource) Create(ctx context.Context, req resourc
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	alert, err := r.client.CreateOrganizationSpendAlert(ctx, client.SpendAlertCreateRequest{ThresholdAmount: plan.ThresholdAmount.ValueInt64(), Currency: plan.Currency.ValueString(), Interval: plan.Interval.ValueString(), NotificationChannel: channel})
+	alert, err := r.client.CreateProjectSpendAlert(ctx, plan.ProjectID.ValueString(), client.SpendAlertCreateRequest{ThresholdAmount: plan.ThresholdAmount.ValueInt64(), Currency: plan.Currency.ValueString(), Interval: plan.Interval.ValueString(), NotificationChannel: channel})
 	if err != nil {
-		addClientError(&resp.Diagnostics, "Unable to create OpenAI organization spend alert", err)
+		addClientError(&resp.Diagnostics, "Unable to create OpenAI project spend alert", err)
 		return
 	}
-	state, stateDiags := organizationSpendAlertResourceModelFromAPI(ctx, alert)
+	state, stateDiags := projectSpendAlertResourceModelFromAPI(ctx, alert, plan.ProjectID)
 	resp.Diagnostics.Append(stateDiags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -93,22 +97,22 @@ func (r *organizationSpendAlertResource) Create(ctx context.Context, req resourc
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-func (r *organizationSpendAlertResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var state organizationSpendAlertResourceModel
+func (r *projectSpendAlertResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state projectSpendAlertResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	alert, err := r.client.GetOrganizationSpendAlert(ctx, state.ID.ValueString())
+	alert, err := r.client.GetProjectSpendAlert(ctx, state.ProjectID.ValueString(), state.ID.ValueString())
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		addClientError(&resp.Diagnostics, "Unable to read OpenAI organization spend alert", err)
+		addClientError(&resp.Diagnostics, "Unable to read OpenAI project spend alert", err)
 		return
 	}
-	newState, diags := organizationSpendAlertResourceModelFromAPI(ctx, alert)
+	newState, diags := projectSpendAlertResourceModelFromAPI(ctx, alert, state.ProjectID)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -116,8 +120,8 @@ func (r *organizationSpendAlertResource) Read(ctx context.Context, req resource.
 	resp.Diagnostics.Append(resp.State.Set(ctx, &newState)...)
 }
 
-func (r *organizationSpendAlertResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan organizationSpendAlertResourceModel
+func (r *projectSpendAlertResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan projectSpendAlertResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -131,12 +135,12 @@ func (r *organizationSpendAlertResource) Update(ctx context.Context, req resourc
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	alert, err := r.client.UpdateOrganizationSpendAlert(ctx, plan.ID.ValueString(), client.SpendAlertUpdateRequest{ThresholdAmount: plan.ThresholdAmount.ValueInt64(), Currency: plan.Currency.ValueString(), Interval: plan.Interval.ValueString(), NotificationChannel: channel})
+	alert, err := r.client.UpdateProjectSpendAlert(ctx, plan.ProjectID.ValueString(), plan.ID.ValueString(), client.SpendAlertUpdateRequest{ThresholdAmount: plan.ThresholdAmount.ValueInt64(), Currency: plan.Currency.ValueString(), Interval: plan.Interval.ValueString(), NotificationChannel: channel})
 	if err != nil {
-		addClientError(&resp.Diagnostics, "Unable to update OpenAI organization spend alert", err)
+		addClientError(&resp.Diagnostics, "Unable to update OpenAI project spend alert", err)
 		return
 	}
-	state, stateDiags := organizationSpendAlertResourceModelFromAPI(ctx, alert)
+	state, stateDiags := projectSpendAlertResourceModelFromAPI(ctx, alert, plan.ProjectID)
 	resp.Diagnostics.Append(stateDiags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -144,24 +148,30 @@ func (r *organizationSpendAlertResource) Update(ctx context.Context, req resourc
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-func (r *organizationSpendAlertResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var state organizationSpendAlertResourceModel
+func (r *projectSpendAlertResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state projectSpendAlertResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.client.DeleteOrganizationSpendAlert(ctx, state.ID.ValueString()); err != nil && !client.IsNotFound(err) {
-		addClientError(&resp.Diagnostics, "Unable to delete OpenAI organization spend alert", err)
+	if err := r.client.DeleteProjectSpendAlert(ctx, state.ProjectID.ValueString(), state.ID.ValueString()); err != nil && !client.IsNotFound(err) {
+		addClientError(&resp.Diagnostics, "Unable to delete OpenAI project spend alert", err)
 		return
 	}
 	resp.State.RemoveResource(ctx)
 }
 
-func (r *organizationSpendAlertResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+func (r *projectSpendAlertResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	projectID, alertID, err := parseTwoPartImportID(req.ID, "project_id", "spend_alert_id")
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid import ID", err.Error())
+		return
+	}
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), types.StringValue(projectID))...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(alertID))...)
 }
 
-func organizationSpendAlertResourceModelFromAPI(ctx context.Context, alert *client.SpendAlert) (organizationSpendAlertResourceModel, diag.Diagnostics) {
+func projectSpendAlertResourceModelFromAPI(ctx context.Context, alert *client.SpendAlert, projectID types.String) (projectSpendAlertResourceModel, diag.Diagnostics) {
 	channel, diags := spendAlertNotificationChannelModelFromAPI(ctx, alert.NotificationChannel)
-	return organizationSpendAlertResourceModel{ID: types.StringValue(alert.ID), ThresholdAmount: types.Int64Value(alert.ThresholdAmount), Currency: stringOrNull(alert.Currency), Interval: stringOrNull(alert.Interval), NotificationChannel: channel}, diags
+	return projectSpendAlertResourceModel{ID: types.StringValue(alert.ID), ProjectID: projectID, ThresholdAmount: types.Int64Value(alert.ThresholdAmount), Currency: stringOrNull(alert.Currency), Interval: stringOrNull(alert.Interval), NotificationChannel: channel}, diags
 }
