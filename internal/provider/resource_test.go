@@ -22,6 +22,7 @@ import (
 )
 
 type fakeAdminClient struct {
+	client.AdminClient
 	project                 *client.Project
 	projects                []client.Project
 	readProjectID           string

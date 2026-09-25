@@ -11,6 +11,7 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
 )
 
 const DefaultBaseURL = "https://api.openai.com/v1"
@@ -593,7 +594,9 @@ func (c *OpenAIAdminClient) UpdateOrganizationSpendAlert(ctx context.Context, id
 	if params.Interval == "" {
 		params.Interval = openai.AdminOrganizationSpendAlertUpdateParamsIntervalMonth
 	}
-	if req.NotificationChannel.SubjectPrefix != "" {
+	if req.NotificationChannel.SubjectPrefix == "" {
+		params.NotificationChannel.SubjectPrefix = param.Null[string]()
+	} else {
 		params.NotificationChannel.SubjectPrefix = openai.String(req.NotificationChannel.SubjectPrefix)
 	}
 	alert, err := c.client.Admin.Organization.SpendAlerts.Update(ctx, id, params)
@@ -1745,4 +1748,772 @@ func validateRoleAssignment(assignment *RoleAssignment) error {
 		return err
 	}
 	return requireNonEmpty("role assignment", "principal_id", assignment.PrincipalID)
+}
+
+func validateProjectID(projectID string) error { return requireNonEmpty("project", "id", projectID) }
+
+func (c *OpenAIAdminClient) GetProjectDataRetention(ctx context.Context, projectID string) (*DataRetention, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.DataRetention.Get(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectDataRetention(value)
+}
+
+func (c *OpenAIAdminClient) UpdateProjectDataRetention(ctx context.Context, projectID string, req DataRetentionUpdateRequest) (*DataRetention, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.DataRetention.Update(ctx, projectID, openai.AdminOrganizationProjectDataRetentionUpdateParams{RetentionType: openai.AdminOrganizationProjectDataRetentionUpdateParamsRetentionType(req.Type)})
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectDataRetention(value)
+}
+
+func (c *OpenAIAdminClient) GetProjectSpendLimit(ctx context.Context, projectID string) (*SpendLimit, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.SpendLimit.Get(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectSpendLimit(value)
+}
+
+func (c *OpenAIAdminClient) UpdateProjectSpendLimit(ctx context.Context, projectID string, req SpendLimitUpdateRequest) (*SpendLimit, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	params := openai.AdminOrganizationProjectSpendLimitUpdateParams{Currency: openai.AdminOrganizationProjectSpendLimitUpdateParamsCurrency(req.Currency), Interval: openai.AdminOrganizationProjectSpendLimitUpdateParamsInterval(req.Interval), ThresholdAmount: req.ThresholdAmount}
+	if params.Currency == "" {
+		params.Currency = openai.AdminOrganizationProjectSpendLimitUpdateParamsCurrencyUsd
+	}
+	if params.Interval == "" {
+		params.Interval = openai.AdminOrganizationProjectSpendLimitUpdateParamsIntervalMonth
+	}
+	value, err := c.client.Admin.Organization.Projects.SpendLimit.Update(ctx, projectID, params)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectSpendLimit(value)
+}
+
+func (c *OpenAIAdminClient) DeleteProjectSpendLimit(ctx context.Context, projectID string) error {
+	if err := validateProjectID(projectID); err != nil {
+		return err
+	}
+	value, err := c.client.Admin.Organization.Projects.SpendLimit.Delete(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if value == nil || !value.Deleted {
+		return fmt.Errorf("openai project spend limit %q was not deleted", projectID)
+	}
+	return nil
+}
+
+func (c *OpenAIAdminClient) GetProjectModelPermissions(ctx context.Context, projectID string) (*ModelPermissions, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.ModelPermissions.Get(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectModelPermissions(value)
+}
+
+func (c *OpenAIAdminClient) UpdateProjectModelPermissions(ctx context.Context, projectID string, req ModelPermissionsUpdateRequest) (*ModelPermissions, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := requireNonEmpty("project model permissions", "mode", req.Mode); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.ModelPermissions.Update(ctx, projectID, openai.AdminOrganizationProjectModelPermissionUpdateParams{Mode: openai.AdminOrganizationProjectModelPermissionUpdateParamsMode(req.Mode), ModelIDs: append([]string(nil), req.ModelIDs...)})
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectModelPermissions(value)
+}
+
+func (c *OpenAIAdminClient) DeleteProjectModelPermissions(ctx context.Context, projectID string) error {
+	if err := validateProjectID(projectID); err != nil {
+		return err
+	}
+	value, err := c.client.Admin.Organization.Projects.ModelPermissions.Delete(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if value == nil || !value.Deleted {
+		return fmt.Errorf("openai project model permissions %q were not deleted", projectID)
+	}
+	return nil
+}
+
+func (c *OpenAIAdminClient) GetProjectHostedToolPermissions(ctx context.Context, projectID string) (*HostedToolPermissions, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.HostedToolPermissions.Get(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectHostedToolPermissions(value)
+}
+
+func (c *OpenAIAdminClient) UpdateProjectHostedToolPermissions(ctx context.Context, projectID string, req HostedToolPermissionsUpdateRequest) (*HostedToolPermissions, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	params := openai.AdminOrganizationProjectHostedToolPermissionUpdateParams{
+		CodeInterpreter: openai.AdminOrganizationProjectHostedToolPermissionUpdateParamsCodeInterpreter{Enabled: req.CodeInterpreter},
+		FileSearch:      openai.AdminOrganizationProjectHostedToolPermissionUpdateParamsFileSearch{Enabled: req.FileSearch},
+		ImageGeneration: openai.AdminOrganizationProjectHostedToolPermissionUpdateParamsImageGeneration{Enabled: req.ImageGeneration},
+		Mcp:             openai.AdminOrganizationProjectHostedToolPermissionUpdateParamsMcp{Enabled: req.Mcp},
+		WebSearch:       openai.AdminOrganizationProjectHostedToolPermissionUpdateParamsWebSearch{Enabled: req.WebSearch},
+	}
+	value, err := c.client.Admin.Organization.Projects.HostedToolPermissions.Update(ctx, projectID, params)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectHostedToolPermissions(value)
+}
+
+func projectSpendAlertNewParams(req SpendAlertCreateRequest) openai.AdminOrganizationProjectSpendAlertNewParams {
+	params := openai.AdminOrganizationProjectSpendAlertNewParams{Currency: openai.AdminOrganizationProjectSpendAlertNewParamsCurrency(req.Currency), Interval: openai.AdminOrganizationProjectSpendAlertNewParamsInterval(req.Interval), ThresholdAmount: req.ThresholdAmount, NotificationChannel: openai.AdminOrganizationProjectSpendAlertNewParamsNotificationChannel{Recipients: append([]string(nil), req.NotificationChannel.Recipients...)}}
+	if params.Currency == "" {
+		params.Currency = openai.AdminOrganizationProjectSpendAlertNewParamsCurrencyUsd
+	}
+	if params.Interval == "" {
+		params.Interval = openai.AdminOrganizationProjectSpendAlertNewParamsIntervalMonth
+	}
+	if req.NotificationChannel.SubjectPrefix != "" {
+		params.NotificationChannel.SubjectPrefix = openai.String(req.NotificationChannel.SubjectPrefix)
+	}
+	return params
+}
+func projectSpendAlertUpdateParams(req SpendAlertUpdateRequest) openai.AdminOrganizationProjectSpendAlertUpdateParams {
+	params := openai.AdminOrganizationProjectSpendAlertUpdateParams{Currency: openai.AdminOrganizationProjectSpendAlertUpdateParamsCurrency(req.Currency), Interval: openai.AdminOrganizationProjectSpendAlertUpdateParamsInterval(req.Interval), ThresholdAmount: req.ThresholdAmount, NotificationChannel: openai.AdminOrganizationProjectSpendAlertUpdateParamsNotificationChannel{Recipients: append([]string(nil), req.NotificationChannel.Recipients...)}}
+	if params.Currency == "" {
+		params.Currency = openai.AdminOrganizationProjectSpendAlertUpdateParamsCurrencyUsd
+	}
+	if params.Interval == "" {
+		params.Interval = openai.AdminOrganizationProjectSpendAlertUpdateParamsIntervalMonth
+	}
+	if req.NotificationChannel.SubjectPrefix == "" {
+		params.NotificationChannel.SubjectPrefix = param.Null[string]()
+	} else {
+		params.NotificationChannel.SubjectPrefix = openai.String(req.NotificationChannel.SubjectPrefix)
+	}
+	return params
+}
+func (c *OpenAIAdminClient) CreateProjectSpendAlert(ctx context.Context, projectID string, req SpendAlertCreateRequest) (*SpendAlert, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.SpendAlerts.New(ctx, projectID, projectSpendAlertNewParams(req))
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectSpendAlert(value)
+}
+func (c *OpenAIAdminClient) GetProjectSpendAlert(ctx context.Context, projectID, id string) (*SpendAlert, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := requireNonEmpty("project spend alert", "id", id); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.SpendAlerts.Get(ctx, projectID, id)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectSpendAlert(value)
+}
+func (c *OpenAIAdminClient) ListProjectSpendAlerts(ctx context.Context, projectID string, req SpendAlertListRequest) (*SpendAlertListResponse, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	params := openai.AdminOrganizationProjectSpendAlertListParams{}
+	if req.After != "" {
+		params.After = openai.String(req.After)
+	}
+	if req.Before != "" {
+		params.Before = openai.String(req.Before)
+	}
+	if req.Limit > 0 {
+		params.Limit = openai.Int(req.Limit)
+	}
+	if req.Order == "asc" {
+		params.Order = openai.AdminOrganizationProjectSpendAlertListParamsOrderAsc
+	} else if req.Order == "desc" {
+		params.Order = openai.AdminOrganizationProjectSpendAlertListParamsOrderDesc
+	}
+	page, err := c.client.Admin.Organization.Projects.SpendAlerts.List(ctx, projectID, params)
+	if err != nil {
+		return nil, err
+	}
+	resp := &SpendAlertListResponse{Items: make([]SpendAlert, 0, len(page.Data)), HasMore: page.HasMore, LastID: page.LastID}
+	for i := range page.Data {
+		value, err := mapProjectSpendAlert(&page.Data[i])
+		if err != nil {
+			return nil, err
+		}
+		resp.Items = append(resp.Items, *value)
+	}
+	if resp.LastID == "" && len(resp.Items) > 0 {
+		resp.LastID = resp.Items[len(resp.Items)-1].ID
+	}
+	return resp, nil
+}
+func (c *OpenAIAdminClient) UpdateProjectSpendAlert(ctx context.Context, projectID, id string, req SpendAlertUpdateRequest) (*SpendAlert, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := requireNonEmpty("project spend alert", "id", id); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.SpendAlerts.Update(ctx, projectID, id, projectSpendAlertUpdateParams(req))
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectSpendAlert(value)
+}
+func (c *OpenAIAdminClient) DeleteProjectSpendAlert(ctx context.Context, projectID, id string) error {
+	if err := validateProjectID(projectID); err != nil {
+		return err
+	}
+	if err := requireNonEmpty("project spend alert", "id", id); err != nil {
+		return err
+	}
+	value, err := c.client.Admin.Organization.Projects.SpendAlerts.Delete(ctx, projectID, id)
+	if err != nil {
+		return err
+	}
+	if value == nil || !value.Deleted {
+		return fmt.Errorf("openai project spend alert %q was not deleted", id)
+	}
+	return nil
+}
+
+func (c *OpenAIAdminClient) ListProjectRateLimits(ctx context.Context, projectID string, req RateLimitListRequest) (*RateLimitListResponse, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	params := openai.AdminOrganizationProjectRateLimitListRateLimitsParams{}
+	if req.After != "" {
+		params.After = openai.String(req.After)
+	}
+	if req.Before != "" {
+		params.Before = openai.String(req.Before)
+	}
+	if req.Limit > 0 {
+		params.Limit = openai.Int(req.Limit)
+	}
+	page, err := c.client.Admin.Organization.Projects.RateLimits.ListRateLimits(ctx, projectID, params)
+	if err != nil {
+		return nil, err
+	}
+	resp := &RateLimitListResponse{Items: make([]RateLimit, 0, len(page.Data)), HasMore: page.HasMore, LastID: page.LastID}
+	for i := range page.Data {
+		value, err := mapProjectRateLimit(&page.Data[i])
+		if err != nil {
+			return nil, err
+		}
+		resp.Items = append(resp.Items, *value)
+	}
+	if resp.LastID == "" && len(resp.Items) > 0 {
+		resp.LastID = resp.Items[len(resp.Items)-1].ID
+	}
+	return resp, nil
+}
+func (c *OpenAIAdminClient) UpdateProjectRateLimit(ctx context.Context, projectID, rateLimitID string, req RateLimitUpdateRequest) (*RateLimit, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := requireNonEmpty("project rate limit", "id", rateLimitID); err != nil {
+		return nil, err
+	}
+	params := openai.AdminOrganizationProjectRateLimitUpdateRateLimitParams{}
+	if req.Batch1DayMaxInputTokens != nil {
+		params.Batch1DayMaxInputTokens = openai.Int(*req.Batch1DayMaxInputTokens)
+	}
+	if req.MaxAudioMegabytesPer1Minute != nil {
+		params.MaxAudioMegabytesPer1Minute = openai.Int(*req.MaxAudioMegabytesPer1Minute)
+	}
+	if req.MaxImagesPer1Minute != nil {
+		params.MaxImagesPer1Minute = openai.Int(*req.MaxImagesPer1Minute)
+	}
+	if req.MaxRequestsPer1Day != nil {
+		params.MaxRequestsPer1Day = openai.Int(*req.MaxRequestsPer1Day)
+	}
+	if req.MaxRequestsPer1Minute != nil {
+		params.MaxRequestsPer1Minute = openai.Int(*req.MaxRequestsPer1Minute)
+	}
+	if req.MaxTokensPer1Minute != nil {
+		params.MaxTokensPer1Minute = openai.Int(*req.MaxTokensPer1Minute)
+	}
+	value, err := c.client.Admin.Organization.Projects.RateLimits.UpdateRateLimit(ctx, projectID, rateLimitID, params)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectRateLimit(value)
+}
+
+func mapProjectDataRetention(value *openai.ProjectDataRetention) (*DataRetention, error) {
+	if value == nil {
+		return nil, fmt.Errorf("openai project data retention response was empty")
+	}
+	return &DataRetention{ID: "project", Type: string(value.Type)}, nil
+}
+func mapProjectSpendLimit(value *openai.ProjectSpendLimit) (*SpendLimit, error) {
+	if value == nil {
+		return nil, fmt.Errorf("openai project spend limit response was empty")
+	}
+	return &SpendLimit{ID: "project", Currency: string(value.Currency), Interval: string(value.Interval), ThresholdAmount: value.ThresholdAmount, EnforcementStatus: value.Enforcement.Status}, nil
+}
+func mapProjectModelPermissions(value *openai.ProjectModelPermissions) (*ModelPermissions, error) {
+	if value == nil {
+		return nil, fmt.Errorf("openai project model permissions response was empty")
+	}
+	return &ModelPermissions{Mode: string(value.Mode), ModelIDs: append([]string(nil), value.ModelIDs...)}, nil
+}
+func mapProjectHostedToolPermissions(value *openai.ProjectHostedToolPermissions) (*HostedToolPermissions, error) {
+	if value == nil {
+		return nil, fmt.Errorf("openai project hosted tool permissions response was empty")
+	}
+	return &HostedToolPermissions{CodeInterpreter: value.CodeInterpreter.Enabled, FileSearch: value.FileSearch.Enabled, ImageGeneration: value.ImageGeneration.Enabled, Mcp: value.Mcp.Enabled, WebSearch: value.WebSearch.Enabled}, nil
+}
+func mapProjectSpendAlert(value *openai.ProjectSpendAlert) (*SpendAlert, error) {
+	if value == nil {
+		return nil, fmt.Errorf("openai project spend alert response was empty")
+	}
+	return &SpendAlert{ID: value.ID, Currency: string(value.Currency), Interval: string(value.Interval), ThresholdAmount: value.ThresholdAmount, NotificationChannel: SpendAlertNotificationChannel{Recipients: append([]string(nil), value.NotificationChannel.Recipients...), Type: string(value.NotificationChannel.Type), SubjectPrefix: value.NotificationChannel.SubjectPrefix}}, nil
+}
+func int64Pointer(value int64) *int64 { return &value }
+
+func mapProjectRateLimit(value *openai.ProjectRateLimit) (*RateLimit, error) {
+	if value == nil {
+		return nil, fmt.Errorf("openai project rate limit response was empty")
+	}
+	limit := &RateLimit{ID: value.ID, Model: value.Model, MaxRequestsPer1Minute: value.MaxRequestsPer1Minute, MaxTokensPer1Minute: value.MaxTokensPer1Minute}
+	if value.JSON.Batch1DayMaxInputTokens.Valid() {
+		limit.Batch1DayMaxInputTokens = int64Pointer(value.Batch1DayMaxInputTokens)
+	}
+	if value.JSON.MaxAudioMegabytesPer1Minute.Valid() {
+		limit.MaxAudioMegabytesPer1Minute = int64Pointer(value.MaxAudioMegabytesPer1Minute)
+	}
+	if value.JSON.MaxImagesPer1Minute.Valid() {
+		limit.MaxImagesPer1Minute = int64Pointer(value.MaxImagesPer1Minute)
+	}
+	if value.JSON.MaxRequestsPer1Day.Valid() {
+		limit.MaxRequestsPer1Day = int64Pointer(value.MaxRequestsPer1Day)
+	}
+	return limit, nil
+}
+
+func validateProjectUserID(userID string) error { return requireNonEmpty("project user", "id", userID) }
+func validateProjectGroupID(groupID string) error {
+	return requireNonEmpty("project group", "id", groupID)
+}
+func validateRoleID(roleID string) error { return requireNonEmpty("role", "id", roleID) }
+
+func (c *OpenAIAdminClient) CreateProjectUser(ctx context.Context, projectID string, req ProjectUserCreateRequest) (*ProjectUser, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := requireNonEmpty("project user", "role", req.Role); err != nil {
+		return nil, err
+	}
+	if req.UserID == "" && req.Email == "" {
+		return nil, fmt.Errorf("project user requires user_id or email")
+	}
+	params := openai.AdminOrganizationProjectUserNewParams{Role: req.Role}
+	if req.UserID != "" {
+		params.UserID = openai.String(req.UserID)
+	}
+	if req.Email != "" {
+		params.Email = openai.String(req.Email)
+	}
+	value, err := c.client.Admin.Organization.Projects.Users.New(ctx, projectID, params)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectUser(value)
+}
+func (c *OpenAIAdminClient) GetProjectUser(ctx context.Context, projectID, userID string) (*ProjectUser, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateProjectUserID(userID); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.Users.Get(ctx, projectID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectUser(value)
+}
+func (c *OpenAIAdminClient) ListProjectUsers(ctx context.Context, projectID string, req ProjectUserListRequest) (*ProjectUserListResponse, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	params := openai.AdminOrganizationProjectUserListParams{}
+	if req.After != "" {
+		params.After = openai.String(req.After)
+	}
+	if req.Limit > 0 {
+		params.Limit = openai.Int(req.Limit)
+	}
+	page, err := c.client.Admin.Organization.Projects.Users.List(ctx, projectID, params)
+	if err != nil {
+		return nil, err
+	}
+	resp := &ProjectUserListResponse{Items: make([]ProjectUser, 0, len(page.Data)), HasMore: page.HasMore, LastID: page.LastID}
+	for i := range page.Data {
+		value, err := mapProjectUser(&page.Data[i])
+		if err != nil {
+			return nil, err
+		}
+		resp.Items = append(resp.Items, *value)
+	}
+	if resp.LastID == "" && len(resp.Items) > 0 {
+		resp.LastID = resp.Items[len(resp.Items)-1].ID
+	}
+	return resp, nil
+}
+func (c *OpenAIAdminClient) UpdateProjectUser(ctx context.Context, projectID, userID string, req ProjectUserUpdateRequest) (*ProjectUser, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateProjectUserID(userID); err != nil {
+		return nil, err
+	}
+	if err := requireNonEmpty("project user", "role", req.Role); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.Users.Update(ctx, projectID, userID, openai.AdminOrganizationProjectUserUpdateParams{Role: openai.String(req.Role)})
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectUser(value)
+}
+func (c *OpenAIAdminClient) DeleteProjectUser(ctx context.Context, projectID, userID string) error {
+	if err := validateProjectID(projectID); err != nil {
+		return err
+	}
+	if err := validateProjectUserID(userID); err != nil {
+		return err
+	}
+	value, err := c.client.Admin.Organization.Projects.Users.Delete(ctx, projectID, userID)
+	if err != nil {
+		return err
+	}
+	if value == nil || !value.Deleted || (value.ID != "" && value.ID != userID) {
+		return fmt.Errorf("openai project user %q was not deleted", userID)
+	}
+	return nil
+}
+
+func (c *OpenAIAdminClient) CreateProjectGroup(ctx context.Context, projectID string, req ProjectGroupCreateRequest) (*ProjectGroup, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateProjectGroupID(req.GroupID); err != nil {
+		return nil, err
+	}
+	if err := requireNonEmpty("project group", "role", req.Role); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.Groups.New(ctx, projectID, openai.AdminOrganizationProjectGroupNewParams{GroupID: req.GroupID, Role: req.Role})
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectGroup(value)
+}
+func (c *OpenAIAdminClient) GetProjectGroup(ctx context.Context, projectID, groupID string, req ProjectGroupGetRequest) (*ProjectGroup, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateProjectGroupID(groupID); err != nil {
+		return nil, err
+	}
+	params := openai.AdminOrganizationProjectGroupGetParams{}
+	if req.GroupType != "" {
+		params.GroupType = openai.AdminOrganizationProjectGroupGetParamsGroupType(req.GroupType)
+	}
+	value, err := c.client.Admin.Organization.Projects.Groups.Get(ctx, projectID, groupID, params)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectGroup(value)
+}
+func (c *OpenAIAdminClient) ListProjectGroups(ctx context.Context, projectID string, req ProjectGroupListRequest) (*ProjectGroupListResponse, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	params := openai.AdminOrganizationProjectGroupListParams{}
+	if req.After != "" {
+		params.After = openai.String(req.After)
+	}
+	if req.Limit > 0 {
+		params.Limit = openai.Int(req.Limit)
+	}
+	if req.Order == "asc" {
+		params.Order = openai.AdminOrganizationProjectGroupListParamsOrderAsc
+	} else if req.Order == "desc" {
+		params.Order = openai.AdminOrganizationProjectGroupListParamsOrderDesc
+	}
+	page, err := c.client.Admin.Organization.Projects.Groups.List(ctx, projectID, params)
+	if err != nil {
+		return nil, err
+	}
+	resp := &ProjectGroupListResponse{Items: make([]ProjectGroup, 0, len(page.Data)), HasMore: page.HasMore, Next: page.Next}
+	for i := range page.Data {
+		value, err := mapProjectGroup(&page.Data[i])
+		if err != nil {
+			return nil, err
+		}
+		resp.Items = append(resp.Items, *value)
+	}
+	return resp, nil
+}
+func (c *OpenAIAdminClient) DeleteProjectGroup(ctx context.Context, projectID, groupID string) error {
+	if err := validateProjectID(projectID); err != nil {
+		return err
+	}
+	if err := validateProjectGroupID(groupID); err != nil {
+		return err
+	}
+	value, err := c.client.Admin.Organization.Projects.Groups.Delete(ctx, projectID, groupID)
+	if err != nil {
+		return err
+	}
+	if value == nil || !value.Deleted {
+		return fmt.Errorf("openai project group %q was not deleted", groupID)
+	}
+	return nil
+}
+
+func projectUserRoleParams(req RoleAssignmentListRequest) openai.AdminOrganizationProjectUserRoleListParams {
+	params := openai.AdminOrganizationProjectUserRoleListParams{}
+	if req.After != "" {
+		params.After = openai.String(req.After)
+	}
+	if req.Limit > 0 {
+		params.Limit = openai.Int(req.Limit)
+	}
+	if req.Order == "asc" {
+		params.Order = openai.AdminOrganizationProjectUserRoleListParamsOrderAsc
+	} else if req.Order == "desc" {
+		params.Order = openai.AdminOrganizationProjectUserRoleListParamsOrderDesc
+	}
+	return params
+}
+func projectGroupRoleParams(req RoleAssignmentListRequest) openai.AdminOrganizationProjectGroupRoleListParams {
+	params := openai.AdminOrganizationProjectGroupRoleListParams{}
+	if req.After != "" {
+		params.After = openai.String(req.After)
+	}
+	if req.Limit > 0 {
+		params.Limit = openai.Int(req.Limit)
+	}
+	if req.Order == "asc" {
+		params.Order = openai.AdminOrganizationProjectGroupRoleListParamsOrderAsc
+	} else if req.Order == "desc" {
+		params.Order = openai.AdminOrganizationProjectGroupRoleListParamsOrderDesc
+	}
+	return params
+}
+func validateProjectRoleArgs(projectID, principalID, roleID, principal string) error {
+	if err := validateProjectID(projectID); err != nil {
+		return err
+	}
+	if err := requireNonEmpty("project "+principal, "id", principalID); err != nil {
+		return err
+	}
+	return validateRoleID(roleID)
+}
+func (c *OpenAIAdminClient) CreateProjectUserRole(ctx context.Context, projectID, userID string, req RoleAssignmentCreateRequest) (*RoleAssignment, error) {
+	if err := validateProjectRoleArgs(projectID, userID, req.RoleID, "user"); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.Users.Roles.New(ctx, projectID, userID, openai.AdminOrganizationProjectUserRoleNewParams{RoleID: req.RoleID})
+	if err != nil {
+		return nil, err
+	}
+	return mapRoleAssignmentFromRole(&value.Role, userID, "user")
+}
+func (c *OpenAIAdminClient) GetProjectUserRole(ctx context.Context, projectID, userID, roleID string) (*RoleAssignment, error) {
+	if err := validateProjectRoleArgs(projectID, userID, roleID, "user"); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.Users.Roles.Get(ctx, projectID, userID, roleID)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectUserRoleGet(value, userID)
+}
+func (c *OpenAIAdminClient) ListProjectUserRoles(ctx context.Context, projectID, userID string, req RoleAssignmentListRequest) (*RoleAssignmentListResponse, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateProjectUserID(userID); err != nil {
+		return nil, err
+	}
+	page, err := c.client.Admin.Organization.Projects.Users.Roles.List(ctx, projectID, userID, projectUserRoleParams(req))
+	if err != nil {
+		return nil, err
+	}
+	resp := &RoleAssignmentListResponse{Items: make([]RoleAssignment, 0, len(page.Data)), HasMore: page.HasMore, Next: page.Next}
+	for i := range page.Data {
+		value, err := mapProjectUserRoleList(&page.Data[i], userID)
+		if err != nil {
+			return nil, err
+		}
+		resp.Items = append(resp.Items, *value)
+	}
+	return resp, nil
+}
+func (c *OpenAIAdminClient) DeleteProjectUserRole(ctx context.Context, projectID, userID, roleID string) error {
+	if err := validateProjectRoleArgs(projectID, userID, roleID, "user"); err != nil {
+		return err
+	}
+	value, err := c.client.Admin.Organization.Projects.Users.Roles.Delete(ctx, projectID, userID, roleID)
+	if err != nil {
+		return err
+	}
+	if value == nil || !value.Deleted {
+		return fmt.Errorf("openai project user role %q was not deleted", roleID)
+	}
+	return nil
+}
+func (c *OpenAIAdminClient) CreateProjectGroupRole(ctx context.Context, projectID, groupID string, req RoleAssignmentCreateRequest) (*RoleAssignment, error) {
+	if err := validateProjectRoleArgs(projectID, groupID, req.RoleID, "group"); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.Groups.Roles.New(ctx, projectID, groupID, openai.AdminOrganizationProjectGroupRoleNewParams{RoleID: req.RoleID})
+	if err != nil {
+		return nil, err
+	}
+	return mapRoleAssignmentFromRole(&value.Role, groupID, "group")
+}
+func (c *OpenAIAdminClient) GetProjectGroupRole(ctx context.Context, projectID, groupID, roleID string) (*RoleAssignment, error) {
+	if err := validateProjectRoleArgs(projectID, groupID, roleID, "group"); err != nil {
+		return nil, err
+	}
+	value, err := c.client.Admin.Organization.Projects.Groups.Roles.Get(ctx, projectID, groupID, roleID)
+	if err != nil {
+		return nil, err
+	}
+	return mapProjectGroupRoleGet(value, groupID)
+}
+func (c *OpenAIAdminClient) ListProjectGroupRoles(ctx context.Context, projectID, groupID string, req RoleAssignmentListRequest) (*RoleAssignmentListResponse, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateProjectGroupID(groupID); err != nil {
+		return nil, err
+	}
+	page, err := c.client.Admin.Organization.Projects.Groups.Roles.List(ctx, projectID, groupID, projectGroupRoleParams(req))
+	if err != nil {
+		return nil, err
+	}
+	resp := &RoleAssignmentListResponse{Items: make([]RoleAssignment, 0, len(page.Data)), HasMore: page.HasMore, Next: page.Next}
+	for i := range page.Data {
+		value, err := mapProjectGroupRoleList(&page.Data[i], groupID)
+		if err != nil {
+			return nil, err
+		}
+		resp.Items = append(resp.Items, *value)
+	}
+	return resp, nil
+}
+func (c *OpenAIAdminClient) DeleteProjectGroupRole(ctx context.Context, projectID, groupID, roleID string) error {
+	if err := validateProjectRoleArgs(projectID, groupID, roleID, "group"); err != nil {
+		return err
+	}
+	value, err := c.client.Admin.Organization.Projects.Groups.Roles.Delete(ctx, projectID, groupID, roleID)
+	if err != nil {
+		return err
+	}
+	if value == nil || !value.Deleted {
+		return fmt.Errorf("openai project group role %q was not deleted", roleID)
+	}
+	return nil
+}
+
+func mapProjectUser(value *openai.ProjectUser) (*ProjectUser, error) {
+	if value == nil {
+		return nil, fmt.Errorf("openai project user response was empty")
+	}
+	mapped := &ProjectUser{ID: value.ID, Role: value.Role, Email: value.Email, Name: value.Name, AddedAt: value.AddedAt}
+	if err := requireNonEmpty("project user", "id", mapped.ID); err != nil {
+		return nil, err
+	}
+	return mapped, nil
+}
+func mapProjectGroup(value *openai.ProjectGroup) (*ProjectGroup, error) {
+	if value == nil {
+		return nil, fmt.Errorf("openai project group response was empty")
+	}
+	mapped := &ProjectGroup{ID: value.ProjectID + "/" + value.GroupID, ProjectID: value.ProjectID, GroupID: value.GroupID, GroupName: value.GroupName, GroupType: string(value.GroupType), CreatedAt: value.CreatedAt}
+	if err := requireNonEmpty("project group", "group_id", mapped.GroupID); err != nil {
+		return nil, err
+	}
+	return mapped, nil
+}
+func projectRoleAssignment(role Role, principalID, principalType string, createdAt, updatedAt int64, createdBy string, sources []RoleAssignmentSource) (*RoleAssignment, error) {
+	mapped := &RoleAssignment{Role: role, PrincipalID: principalID, PrincipalType: principalType, CreatedAt: createdAt, UpdatedAt: updatedAt, CreatedBy: createdBy, AssignmentSources: sources}
+	if err := validateRoleAssignment(mapped); err != nil {
+		return nil, err
+	}
+	return mapped, nil
+}
+func mapProjectUserRoleGet(value *openai.AdminOrganizationProjectUserRoleGetResponse, userID string) (*RoleAssignment, error) {
+	if value == nil {
+		return nil, fmt.Errorf("openai project user role response was empty")
+	}
+	sources := make([]RoleAssignmentSource, 0, len(value.AssignmentSources))
+	for _, s := range value.AssignmentSources {
+		sources = append(sources, RoleAssignmentSource{PrincipalID: s.PrincipalID, PrincipalType: s.PrincipalType})
+	}
+	return projectRoleAssignment(Role{ID: value.ID, Name: value.Name, Description: value.Description, Permissions: append([]string(nil), value.Permissions...), PredefinedRole: value.PredefinedRole, ResourceType: value.ResourceType}, userID, "user", value.CreatedAt, value.UpdatedAt, value.CreatedBy, sources)
+}
+func mapProjectUserRoleList(value *openai.AdminOrganizationProjectUserRoleListResponse, userID string) (*RoleAssignment, error) {
+	if value == nil {
+		return nil, fmt.Errorf("openai project user role response was empty")
+	}
+	sources := make([]RoleAssignmentSource, 0, len(value.AssignmentSources))
+	for _, s := range value.AssignmentSources {
+		sources = append(sources, RoleAssignmentSource{PrincipalID: s.PrincipalID, PrincipalType: s.PrincipalType})
+	}
+	return projectRoleAssignment(Role{ID: value.ID, Name: value.Name, Description: value.Description, Permissions: append([]string(nil), value.Permissions...), PredefinedRole: value.PredefinedRole, ResourceType: value.ResourceType}, userID, "user", value.CreatedAt, value.UpdatedAt, value.CreatedBy, sources)
+}
+
+func mapProjectGroupRoleGet(value *openai.AdminOrganizationProjectGroupRoleGetResponse, groupID string) (*RoleAssignment, error) {
+	if value == nil {
+		return nil, fmt.Errorf("openai project group role response was empty")
+	}
+	sources := make([]RoleAssignmentSource, 0, len(value.AssignmentSources))
+	for _, source := range value.AssignmentSources {
+		sources = append(sources, RoleAssignmentSource{PrincipalID: source.PrincipalID, PrincipalType: source.PrincipalType})
+	}
+	return projectRoleAssignment(Role{ID: value.ID, Name: value.Name, Description: value.Description, Permissions: append([]string(nil), value.Permissions...), PredefinedRole: value.PredefinedRole, ResourceType: value.ResourceType}, groupID, "group", value.CreatedAt, value.UpdatedAt, value.CreatedBy, sources)
+}
+func mapProjectGroupRoleList(value *openai.AdminOrganizationProjectGroupRoleListResponse, groupID string) (*RoleAssignment, error) {
+	if value == nil {
+		return nil, fmt.Errorf("openai project group role response was empty")
+	}
+	sources := make([]RoleAssignmentSource, 0, len(value.AssignmentSources))
+	for _, source := range value.AssignmentSources {
+		sources = append(sources, RoleAssignmentSource{PrincipalID: source.PrincipalID, PrincipalType: source.PrincipalType})
+	}
+	return projectRoleAssignment(Role{ID: value.ID, Name: value.Name, Description: value.Description, Permissions: append([]string(nil), value.Permissions...), PredefinedRole: value.PredefinedRole, ResourceType: value.ResourceType}, groupID, "group", value.CreatedAt, value.UpdatedAt, value.CreatedBy, sources)
 }
