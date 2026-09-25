@@ -517,11 +517,11 @@ func TestProviderMetadataSchemaResourcesAndConfigure(t *testing.T) {
 	if schemaResp.Diagnostics.HasError() || len(schemaResp.Schema.Attributes) == 0 {
 		t.Fatalf("schema diagnostics=%v attrs=%d", schemaResp.Diagnostics, len(schemaResp.Schema.Attributes))
 	}
-	if len(p.Resources(ctx)) != 15 {
-		t.Fatalf("expected 15 resources")
+	if len(p.Resources(ctx)) != 25 {
+		t.Fatalf("expected 25 resources")
 	}
-	if len(p.DataSources(ctx)) != 28 {
-		t.Fatalf("expected 28 data sources")
+	if len(p.DataSources(ctx)) != 44 {
+		t.Fatalf("expected 44 data sources")
 	}
 
 	configPlan := tfsdk.Plan{Schema: schemaResp.Schema}

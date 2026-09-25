@@ -208,6 +208,67 @@ type SpendAlertListResponse struct {
 	LastID  string
 }
 
+// ModelPermissions is a project's model allowlist or denylist policy.
+type ModelPermissions struct {
+	Mode     string
+	ModelIDs []string
+}
+
+type ModelPermissionsUpdateRequest struct {
+	Mode     string
+	ModelIDs []string
+}
+
+// HostedToolPermissions reports whether each OpenAI-hosted tool is enabled.
+type HostedToolPermissions struct {
+	CodeInterpreter bool
+	FileSearch      bool
+	ImageGeneration bool
+	Mcp             bool
+	WebSearch       bool
+}
+
+type HostedToolPermissionsUpdateRequest struct {
+	CodeInterpreter bool
+	FileSearch      bool
+	ImageGeneration bool
+	Mcp             bool
+	WebSearch       bool
+}
+
+type RateLimit struct {
+	ID                          string
+	Model                       string
+	Batch1DayMaxInputTokens     *int64
+	MaxAudioMegabytesPer1Minute *int64
+	MaxImagesPer1Minute         *int64
+	MaxRequestsPer1Day          *int64
+	MaxRequestsPer1Minute       int64
+	MaxTokensPer1Minute         int64
+}
+
+type RateLimitListRequest struct {
+	After  string
+	Before string
+	Limit  int64
+}
+
+type RateLimitListResponse struct {
+	Items   []RateLimit
+	HasMore bool
+	LastID  string
+}
+
+// Pointer fields distinguish an omitted limit from explicitly setting it to zero.
+type RateLimitUpdateRequest struct {
+	Batch1DayMaxInputTokens     *int64
+	MaxAudioMegabytesPer1Minute *int64
+	MaxImagesPer1Minute         *int64
+	MaxRequestsPer1Day          *int64
+	MaxRequestsPer1Minute       *int64
+	MaxTokensPer1Minute         *int64
+}
+
 type CertificateDetails struct {
 	Content   string
 	ExpiresAt int64
@@ -358,6 +419,57 @@ type OrganizationGroupUserListResponse struct {
 	Next    string
 }
 
+type ProjectUser struct {
+	ID      string
+	Role    string
+	Email   string
+	Name    string
+	AddedAt int64
+}
+
+type ProjectUserCreateRequest struct {
+	UserID string
+	Email  string
+	Role   string
+}
+
+type ProjectUserUpdateRequest struct{ Role string }
+type ProjectUserListRequest struct {
+	After string
+	Limit int64
+}
+type ProjectUserListResponse struct {
+	Items   []ProjectUser
+	HasMore bool
+	LastID  string
+}
+
+// ProjectGroup is a group's membership in a project.
+type ProjectGroup struct {
+	ID        string
+	ProjectID string
+	GroupID   string
+	GroupName string
+	GroupType string
+	CreatedAt int64
+}
+
+type ProjectGroupCreateRequest struct {
+	GroupID string
+	Role    string
+}
+type ProjectGroupGetRequest struct{ GroupType string }
+type ProjectGroupListRequest struct {
+	After string
+	Limit int64
+	Order string
+}
+type ProjectGroupListResponse struct {
+	Items   []ProjectGroup
+	HasMore bool
+	Next    string
+}
+
 type Role struct {
 	ID             string
 	Name           string
@@ -460,6 +572,24 @@ type AdminClient interface {
 	UpdateOrganizationSpendAlert(ctx context.Context, id string, req SpendAlertUpdateRequest) (*SpendAlert, error)
 	DeleteOrganizationSpendAlert(ctx context.Context, id string) error
 
+	GetProjectDataRetention(ctx context.Context, projectID string) (*DataRetention, error)
+	UpdateProjectDataRetention(ctx context.Context, projectID string, req DataRetentionUpdateRequest) (*DataRetention, error)
+	GetProjectSpendLimit(ctx context.Context, projectID string) (*SpendLimit, error)
+	UpdateProjectSpendLimit(ctx context.Context, projectID string, req SpendLimitUpdateRequest) (*SpendLimit, error)
+	DeleteProjectSpendLimit(ctx context.Context, projectID string) error
+	GetProjectModelPermissions(ctx context.Context, projectID string) (*ModelPermissions, error)
+	UpdateProjectModelPermissions(ctx context.Context, projectID string, req ModelPermissionsUpdateRequest) (*ModelPermissions, error)
+	DeleteProjectModelPermissions(ctx context.Context, projectID string) error
+	GetProjectHostedToolPermissions(ctx context.Context, projectID string) (*HostedToolPermissions, error)
+	UpdateProjectHostedToolPermissions(ctx context.Context, projectID string, req HostedToolPermissionsUpdateRequest) (*HostedToolPermissions, error)
+	CreateProjectSpendAlert(ctx context.Context, projectID string, req SpendAlertCreateRequest) (*SpendAlert, error)
+	GetProjectSpendAlert(ctx context.Context, projectID, id string) (*SpendAlert, error)
+	ListProjectSpendAlerts(ctx context.Context, projectID string, req SpendAlertListRequest) (*SpendAlertListResponse, error)
+	UpdateProjectSpendAlert(ctx context.Context, projectID, id string, req SpendAlertUpdateRequest) (*SpendAlert, error)
+	DeleteProjectSpendAlert(ctx context.Context, projectID, id string) error
+	ListProjectRateLimits(ctx context.Context, projectID string, req RateLimitListRequest) (*RateLimitListResponse, error)
+	UpdateProjectRateLimit(ctx context.Context, projectID, rateLimitID string, req RateLimitUpdateRequest) (*RateLimit, error)
+
 	CreateOrganizationCertificate(ctx context.Context, req CertificateCreateRequest) (*Certificate, error)
 	GetOrganizationCertificate(ctx context.Context, id string, includeContent bool) (*Certificate, error)
 	ListOrganizationCertificates(ctx context.Context, req CertificateListRequest) (*CertificateListResponse, error)
@@ -483,6 +613,16 @@ type AdminClient interface {
 	ListOrganizationGroupUsers(ctx context.Context, groupID string, req OrganizationGroupUserListRequest) (*OrganizationGroupUserListResponse, error)
 	DeleteOrganizationGroupUser(ctx context.Context, groupID, userID string) error
 
+	CreateProjectUser(ctx context.Context, projectID string, req ProjectUserCreateRequest) (*ProjectUser, error)
+	GetProjectUser(ctx context.Context, projectID, userID string) (*ProjectUser, error)
+	ListProjectUsers(ctx context.Context, projectID string, req ProjectUserListRequest) (*ProjectUserListResponse, error)
+	UpdateProjectUser(ctx context.Context, projectID, userID string, req ProjectUserUpdateRequest) (*ProjectUser, error)
+	DeleteProjectUser(ctx context.Context, projectID, userID string) error
+	CreateProjectGroup(ctx context.Context, projectID string, req ProjectGroupCreateRequest) (*ProjectGroup, error)
+	GetProjectGroup(ctx context.Context, projectID, groupID string, req ProjectGroupGetRequest) (*ProjectGroup, error)
+	ListProjectGroups(ctx context.Context, projectID string, req ProjectGroupListRequest) (*ProjectGroupListResponse, error)
+	DeleteProjectGroup(ctx context.Context, projectID, groupID string) error
+
 	CreateOrganizationRole(ctx context.Context, req RoleCreateRequest) (*Role, error)
 	GetOrganizationRole(ctx context.Context, roleID string) (*Role, error)
 	ListOrganizationRoles(ctx context.Context, req RoleListRequest) (*RoleListResponse, error)
@@ -504,6 +644,14 @@ type AdminClient interface {
 	GetOrganizationGroupRole(ctx context.Context, groupID, roleID string) (*RoleAssignment, error)
 	ListOrganizationGroupRoles(ctx context.Context, groupID string, req RoleAssignmentListRequest) (*RoleAssignmentListResponse, error)
 	DeleteOrganizationGroupRole(ctx context.Context, groupID, roleID string) error
+	CreateProjectUserRole(ctx context.Context, projectID, userID string, req RoleAssignmentCreateRequest) (*RoleAssignment, error)
+	GetProjectUserRole(ctx context.Context, projectID, userID, roleID string) (*RoleAssignment, error)
+	ListProjectUserRoles(ctx context.Context, projectID, userID string, req RoleAssignmentListRequest) (*RoleAssignmentListResponse, error)
+	DeleteProjectUserRole(ctx context.Context, projectID, userID, roleID string) error
+	CreateProjectGroupRole(ctx context.Context, projectID, groupID string, req RoleAssignmentCreateRequest) (*RoleAssignment, error)
+	GetProjectGroupRole(ctx context.Context, projectID, groupID, roleID string) (*RoleAssignment, error)
+	ListProjectGroupRoles(ctx context.Context, projectID, groupID string, req RoleAssignmentListRequest) (*RoleAssignmentListResponse, error)
+	DeleteProjectGroupRole(ctx context.Context, projectID, groupID, roleID string) error
 }
 
 func requireNonEmpty(entity, field, value string) error {

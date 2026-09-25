@@ -71,6 +71,10 @@ func (r *organizationSpendAlertResource) Create(ctx context.Context, req resourc
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	if !plan.NotificationChannel.SubjectPrefix.IsNull() && plan.NotificationChannel.SubjectPrefix.ValueString() == "" {
+		resp.Diagnostics.AddAttributeError(path.Root("notification_channel").AtName("subject_prefix"), "Invalid OpenAI spend alert subject prefix", "Omit subject_prefix to clear it; an explicitly empty prefix is not supported.")
+		return
+	}
 	channel, diags := spendAlertNotificationChannelFromModel(ctx, plan.NotificationChannel, path.Root("notification_channel"))
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -116,6 +120,10 @@ func (r *organizationSpendAlertResource) Update(ctx context.Context, req resourc
 	var plan organizationSpendAlertResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !plan.NotificationChannel.SubjectPrefix.IsNull() && plan.NotificationChannel.SubjectPrefix.ValueString() == "" {
+		resp.Diagnostics.AddAttributeError(path.Root("notification_channel").AtName("subject_prefix"), "Invalid OpenAI spend alert subject prefix", "Omit subject_prefix to clear it; an explicitly empty prefix is not supported.")
 		return
 	}
 	channel, diags := spendAlertNotificationChannelFromModel(ctx, plan.NotificationChannel, path.Root("notification_channel"))
