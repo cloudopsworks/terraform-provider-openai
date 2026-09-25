@@ -39,7 +39,7 @@ terraform import openai_organization_spend_alert.eighty_percent spend_alert_123
 - `currency` (String) Currency for `threshold_amount`. Default: `USD`.
 - `interval` (String) Spend evaluation interval. Default: `month`.
 - `notification_channel.type` (String) Notification channel type. Default: `email`.
-- `notification_channel.subject_prefix` (String) Optional subject prefix for alert emails.
+- `notification_channel.subject_prefix` (String) Optional subject prefix for alert emails. Omit it on update to explicitly clear an existing prefix; an empty string is rejected.
 
 ### Read-Only
 
