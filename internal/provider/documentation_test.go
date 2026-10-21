@@ -17,51 +17,77 @@ func TestProviderRegisteredSurfacesMatchTerraformDocumentation(t *testing.T) {
 	p := &openAIProvider{version: "test"}
 
 	resourceHierarchies := map[string]string{
-		"openai_admin_api_key":               "Administration > Organization > Admin API Keys",
-		"openai_organization_certificate":    "Administration > Organization > Certificates",
-		"openai_organization_data_retention": "Administration > Organization > Data Retention",
-		"openai_organization_group":          "Administration > Organization > Groups",
-		"openai_organization_group_role":     "Administration > Organization > Groups > Roles",
-		"openai_organization_group_user":     "Administration > Organization > Groups > Users",
-		"openai_organization_invite":         "Administration > Organization > Invites",
-		"openai_organization_role":           "Administration > Organization > Roles",
-		"openai_organization_spend_alert":    "Administration > Organization > Spend Alerts",
-		"openai_organization_spend_limit":    "Administration > Organization > Spend Limit",
-		"openai_organization_user_role":      "Administration > Organization > Users > Roles",
-		"openai_project":                     "Administration > Organization > Projects",
-		"openai_project_api_key":             "Administration > Organization > Projects > Service Accounts > API Keys",
-		"openai_project_role":                "Administration > Organization > Projects > Roles",
-		"openai_service_account":             "Administration > Organization > Projects > Service Accounts",
+		"openai_admin_api_key":                   "Administration > Organization > Admin API Keys",
+		"openai_organization_certificate":        "Administration > Organization > Certificates",
+		"openai_organization_data_retention":     "Administration > Organization > Data Retention",
+		"openai_organization_group":              "Administration > Organization > Groups",
+		"openai_organization_group_role":         "Administration > Organization > Groups > Roles",
+		"openai_organization_group_user":         "Administration > Organization > Groups > Users",
+		"openai_organization_invite":             "Administration > Organization > Invites",
+		"openai_organization_role":               "Administration > Organization > Roles",
+		"openai_organization_spend_alert":        "Administration > Organization > Spend Alerts",
+		"openai_organization_spend_limit":        "Administration > Organization > Spend Limit",
+		"openai_organization_user_role":          "Administration > Organization > Users > Roles",
+		"openai_project":                         "Administration > Organization > Projects",
+		"openai_project_api_key":                 "Administration > Organization > Projects > Service Accounts > API Keys",
+		"openai_project_role":                    "Administration > Organization > Projects > Roles",
+		"openai_service_account":                 "Administration > Organization > Projects > Service Accounts",
+		"openai_project_data_retention":          "Administration > Organization > Projects > Data Retention",
+		"openai_project_spend_limit":             "Administration > Organization > Projects > Spend Limit",
+		"openai_project_spend_alert":             "Administration > Organization > Projects > Spend Alerts",
+		"openai_project_rate_limit":              "Administration > Organization > Projects > Rate Limits",
+		"openai_project_model_permissions":       "Administration > Organization > Projects > Model Permissions",
+		"openai_project_hosted_tool_permissions": "Administration > Organization > Projects > Hosted Tool Permissions",
+		"openai_project_user":                    "Administration > Organization > Projects > Users",
+		"openai_project_user_role":               "Administration > Organization > Projects > Users > Roles",
+		"openai_project_group_role":              "Administration > Organization > Projects > Groups > Roles",
+		"openai_project_group":                   "Administration > Organization > Projects > Groups",
 	}
 	dataSourceHierarchies := map[string]string{
-		"openai_admin_api_key":               "Administration > Organization > Admin API Keys",
-		"openai_admin_api_keys":              "Administration > Organization > Admin API Keys",
-		"openai_organization_certificate":    "Administration > Organization > Certificates",
-		"openai_organization_certificates":   "Administration > Organization > Certificates",
-		"openai_organization_data_retention": "Administration > Organization > Data Retention",
-		"openai_organization_group":          "Administration > Organization > Groups",
-		"openai_organization_group_role":     "Administration > Organization > Groups > Roles",
-		"openai_organization_group_roles":    "Administration > Organization > Groups > Roles",
-		"openai_organization_group_user":     "Administration > Organization > Groups > Users",
-		"openai_organization_group_users":    "Administration > Organization > Groups > Users",
-		"openai_organization_groups":         "Administration > Organization > Groups",
-		"openai_organization_invite":         "Administration > Organization > Invites",
-		"openai_organization_invites":        "Administration > Organization > Invites",
-		"openai_organization_role":           "Administration > Organization > Roles",
-		"openai_organization_roles":          "Administration > Organization > Roles",
-		"openai_organization_spend_alert":    "Administration > Organization > Spend Alerts",
-		"openai_organization_spend_alerts":   "Administration > Organization > Spend Alerts",
-		"openai_organization_spend_limit":    "Administration > Organization > Spend Limit",
-		"openai_organization_user":           "Administration > Organization > Users",
-		"openai_organization_user_role":      "Administration > Organization > Users > Roles",
-		"openai_organization_user_roles":     "Administration > Organization > Users > Roles",
-		"openai_organization_users":          "Administration > Organization > Users",
-		"openai_project":                     "Administration > Organization > Projects",
-		"openai_project_role":                "Administration > Organization > Projects > Roles",
-		"openai_project_roles":               "Administration > Organization > Projects > Roles",
-		"openai_projects":                    "Administration > Organization > Projects",
-		"openai_service_account":             "Administration > Organization > Projects > Service Accounts",
-		"openai_service_accounts":            "Administration > Organization > Projects > Service Accounts",
+		"openai_admin_api_key":                   "Administration > Organization > Admin API Keys",
+		"openai_admin_api_keys":                  "Administration > Organization > Admin API Keys",
+		"openai_organization_certificate":        "Administration > Organization > Certificates",
+		"openai_organization_certificates":       "Administration > Organization > Certificates",
+		"openai_organization_data_retention":     "Administration > Organization > Data Retention",
+		"openai_organization_group":              "Administration > Organization > Groups",
+		"openai_organization_group_role":         "Administration > Organization > Groups > Roles",
+		"openai_organization_group_roles":        "Administration > Organization > Groups > Roles",
+		"openai_organization_group_user":         "Administration > Organization > Groups > Users",
+		"openai_organization_group_users":        "Administration > Organization > Groups > Users",
+		"openai_organization_groups":             "Administration > Organization > Groups",
+		"openai_organization_invite":             "Administration > Organization > Invites",
+		"openai_organization_invites":            "Administration > Organization > Invites",
+		"openai_organization_role":               "Administration > Organization > Roles",
+		"openai_organization_roles":              "Administration > Organization > Roles",
+		"openai_organization_spend_alert":        "Administration > Organization > Spend Alerts",
+		"openai_organization_spend_alerts":       "Administration > Organization > Spend Alerts",
+		"openai_organization_spend_limit":        "Administration > Organization > Spend Limit",
+		"openai_organization_user":               "Administration > Organization > Users",
+		"openai_organization_user_role":          "Administration > Organization > Users > Roles",
+		"openai_organization_user_roles":         "Administration > Organization > Users > Roles",
+		"openai_organization_users":              "Administration > Organization > Users",
+		"openai_project":                         "Administration > Organization > Projects",
+		"openai_project_role":                    "Administration > Organization > Projects > Roles",
+		"openai_project_roles":                   "Administration > Organization > Projects > Roles",
+		"openai_projects":                        "Administration > Organization > Projects",
+		"openai_service_account":                 "Administration > Organization > Projects > Service Accounts",
+		"openai_service_accounts":                "Administration > Organization > Projects > Service Accounts",
+		"openai_project_data_retention":          "Administration > Organization > Projects > Data Retention",
+		"openai_project_spend_limit":             "Administration > Organization > Projects > Spend Limit",
+		"openai_project_spend_alert":             "Administration > Organization > Projects > Spend Alerts",
+		"openai_project_spend_alerts":            "Administration > Organization > Projects > Spend Alerts",
+		"openai_project_rate_limit":              "Administration > Organization > Projects > Rate Limits",
+		"openai_project_rate_limits":             "Administration > Organization > Projects > Rate Limits",
+		"openai_project_model_permissions":       "Administration > Organization > Projects > Model Permissions",
+		"openai_project_hosted_tool_permissions": "Administration > Organization > Projects > Hosted Tool Permissions",
+		"openai_project_user_role":               "Administration > Organization > Projects > Users > Roles",
+		"openai_project_user_roles":              "Administration > Organization > Projects > Users > Roles",
+		"openai_project_group_role":              "Administration > Organization > Projects > Groups > Roles",
+		"openai_project_group_roles":             "Administration > Organization > Projects > Groups > Roles",
+		"openai_project_group":                   "Administration > Organization > Projects > Groups",
+		"openai_project_groups":                  "Administration > Organization > Projects > Groups",
+		"openai_project_user":                    "Administration > Organization > Projects > Users",
+		"openai_project_users":                   "Administration > Organization > Projects > Users",
 	}
 
 	registeredResources := resourceTypeNames(ctx, p.Resources(ctx))
@@ -105,6 +131,20 @@ func TestTerraformDocumentationMirrorsOpenAIAdminAPIHierarchy(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDocumentationHierarchyMappingHasNoDuplicateRows(t *testing.T) {
+	content := readRepoFile(t, repositoryRootFromProviderPackage(), "docs/index.md")
+	seen := make(map[string]struct{})
+	for _, line := range strings.Split(content, "\n") {
+		if !strings.HasPrefix(line, "| Administration >") {
+			continue
+		}
+		if _, exists := seen[line]; exists {
+			t.Fatalf("duplicate hierarchy mapping row: %s", line)
+		}
+		seen[line] = struct{}{}
 	}
 }
 

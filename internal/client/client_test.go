@@ -983,3 +983,264 @@ func assertCertificateIDs(t *testing.T, r *http.Request, want string) {
 		t.Fatalf("unexpected certificate IDs body: %#v", body)
 	}
 }
+
+func TestOpenAIAdminClientProjectControls(t *testing.T) {
+	cl := testClient(func(r *http.Request) (*http.Response, error) {
+		body := map[string]any{}
+		if r.Body != nil {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		switch r.Method + " " + r.URL.Path {
+		case "GET /organization/projects/proj_1/data_retention", "POST /organization/projects/proj_1/data_retention":
+			if r.Method == "POST" && body["retention_type"] != "none" {
+				t.Fatalf("retention payload: %#v", body)
+			}
+			return jsonResponse(map[string]any{"type": "none"}), nil
+		case "GET /organization/projects/proj_1/spend_limit", "POST /organization/projects/proj_1/spend_limit":
+			if r.Method == "POST" && (body["currency"] != "USD" || body["interval"] != "month") {
+				t.Fatalf("spend limit payload: %#v", body)
+			}
+			return jsonResponse(map[string]any{"currency": "USD", "interval": "month", "threshold_amount": 100, "enforcement": map[string]any{"status": "enforced"}}), nil
+		case "DELETE /organization/projects/proj_1/spend_limit":
+			return jsonResponse(map[string]any{"deleted": true}), nil
+		case "GET /organization/projects/proj_1/model_permissions", "POST /organization/projects/proj_1/model_permissions":
+			if r.Method == "POST" && body["mode"] != "allow_list" {
+				t.Fatalf("model permissions payload: %#v", body)
+			}
+			return jsonResponse(map[string]any{"mode": "allow_list", "model_ids": []string{"gpt-5"}}), nil
+		case "DELETE /organization/projects/proj_1/model_permissions":
+			return jsonResponse(map[string]any{"deleted": true}), nil
+		case "GET /organization/projects/proj_1/hosted_tool_permissions", "POST /organization/projects/proj_1/hosted_tool_permissions":
+			if r.Method == "POST" {
+				if got := body["code_interpreter"].(map[string]any)["enabled"]; got != true {
+					t.Fatalf("hosted tool payload: %#v", body)
+				}
+			}
+			return jsonResponse(map[string]any{"code_interpreter": map[string]any{"enabled": true}, "file_search": map[string]any{"enabled": false}, "image_generation": map[string]any{"enabled": true}, "mcp": map[string]any{"enabled": false}, "web_search": map[string]any{"enabled": true}}), nil
+		case "POST /organization/projects/proj_1/spend_alerts", "GET /organization/projects/proj_1/spend_alerts/alert_1", "POST /organization/projects/proj_1/spend_alerts/alert_1":
+			return projectSpendAlertResponse()
+		case "GET /organization/projects/proj_1/spend_alerts":
+			if r.URL.Query().Get("after") != "alert_0" {
+				t.Fatalf("spend alert query: %s", r.URL.RawQuery)
+			}
+			return jsonResponse(map[string]any{"data": []any{map[string]any{"id": "alert_1", "currency": "USD", "interval": "month", "threshold_amount": 100, "notification_channel": map[string]any{"recipients": []string{"ops@example.com"}, "type": "email"}}}, "has_more": false, "last_id": "alert_1"}), nil
+		case "DELETE /organization/projects/proj_1/spend_alerts/alert_1":
+			return jsonResponse(map[string]any{"id": "alert_1", "deleted": true}), nil
+		case "GET /organization/projects/proj_1/rate_limits":
+			if r.URL.Query().Get("limit") != "2" {
+				t.Fatalf("rate limit query: %s", r.URL.RawQuery)
+			}
+			return jsonResponse(map[string]any{"data": []any{map[string]any{"id": "rl_1", "model": "gpt-5", "max_requests_per_1_minute": 10, "max_tokens_per_1_minute": 20, "max_images_per_1_minute": 0}}, "has_more": false, "last_id": "rl_1"}), nil
+		case "POST /organization/projects/proj_1/rate_limits/rl_1":
+			if body["max_requests_per_1_minute"] != float64(0) {
+				t.Fatalf("rate limit payload should retain explicit zero: %#v", body)
+			}
+			if _, exists := body["max_images_per_1_minute"]; exists {
+				t.Fatalf("rate limit payload invented an optional zero: %#v", body)
+			}
+			return jsonResponse(map[string]any{"id": "rl_1", "model": "gpt-5", "max_requests_per_1_minute": 0, "max_tokens_per_1_minute": 20}), nil
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		return nil, nil
+	})
+	ctx := context.Background()
+	if _, err := cl.GetProjectDataRetention(ctx, "proj_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.UpdateProjectDataRetention(ctx, "proj_1", DataRetentionUpdateRequest{Type: "none"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.GetProjectSpendLimit(ctx, "proj_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.UpdateProjectSpendLimit(ctx, "proj_1", SpendLimitUpdateRequest{ThresholdAmount: 100}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.DeleteProjectSpendLimit(ctx, "proj_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.GetProjectModelPermissions(ctx, "proj_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.UpdateProjectModelPermissions(ctx, "proj_1", ModelPermissionsUpdateRequest{Mode: "allow_list", ModelIDs: []string{"gpt-5"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.DeleteProjectModelPermissions(ctx, "proj_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.GetProjectHostedToolPermissions(ctx, "proj_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.UpdateProjectHostedToolPermissions(ctx, "proj_1", HostedToolPermissionsUpdateRequest{CodeInterpreter: true, ImageGeneration: true, WebSearch: true}); err != nil {
+		t.Fatal(err)
+	}
+	alertReq := SpendAlertCreateRequest{ThresholdAmount: 100, NotificationChannel: SpendAlertNotificationChannel{Recipients: []string{"ops@example.com"}}}
+	if _, err := cl.CreateProjectSpendAlert(ctx, "proj_1", alertReq); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.GetProjectSpendAlert(ctx, "proj_1", "alert_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.ListProjectSpendAlerts(ctx, "proj_1", SpendAlertListRequest{After: "alert_0"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.UpdateProjectSpendAlert(ctx, "proj_1", "alert_1", SpendAlertUpdateRequest(alertReq)); err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.DeleteProjectSpendAlert(ctx, "proj_1", "alert_1"); err != nil {
+		t.Fatal(err)
+	}
+	limits, err := cl.ListProjectRateLimits(ctx, "proj_1", RateLimitListRequest{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(limits.Items) != 1 || limits.Items[0].Batch1DayMaxInputTokens != nil || limits.Items[0].MaxAudioMegabytesPer1Minute != nil || limits.Items[0].MaxImagesPer1Minute == nil || *limits.Items[0].MaxImagesPer1Minute != 0 || limits.Items[0].MaxRequestsPer1Day != nil {
+		t.Fatalf("optional rate limits did not preserve absence and explicit zero: %#v", limits.Items)
+	}
+	zero := int64(0)
+	if got, err := cl.UpdateProjectRateLimit(ctx, "proj_1", "rl_1", RateLimitUpdateRequest{MaxRequestsPer1Minute: &zero}); err != nil || got.MaxRequestsPer1Minute != 0 {
+		t.Fatalf("UpdateProjectRateLimit() = %#v, %v", got, err)
+	}
+	if _, err := cl.GetProjectSpendLimit(ctx, ""); err == nil {
+		t.Fatal("GetProjectSpendLimit() with empty project ID succeeded")
+	}
+	if _, err := cl.UpdateProjectRateLimit(ctx, "proj_1", "", RateLimitUpdateRequest{}); err == nil {
+		t.Fatal("UpdateProjectRateLimit() with empty ID succeeded")
+	}
+}
+
+func projectSpendAlertResponse() (*http.Response, error) {
+	return jsonResponse(map[string]any{"id": "alert_1", "currency": "USD", "interval": "month", "threshold_amount": 100, "notification_channel": map[string]any{"recipients": []string{"ops@example.com"}, "type": "email"}}), nil
+}
+
+func TestOpenAIAdminClientProjectAccessGraph(t *testing.T) {
+	cl := testClient(func(r *http.Request) (*http.Response, error) {
+		role := map[string]any{"id": "role_1", "name": "member", "permissions": []string{}, "assignment_sources": []any{}, "created_at": 1, "updated_at": 2, "created_by": "user_admin", "description": "", "predefined_role": false, "resource_type": "project", "metadata": map[string]any{}, "created_by_user_obj": map[string]any{}}
+		switch r.Method + " " + r.URL.Path {
+		case "POST /organization/projects/proj_1/users", "GET /organization/projects/proj_1/users/user_1", "POST /organization/projects/proj_1/users/user_1":
+			return jsonResponse(map[string]any{"id": "user_1", "role": "member", "email": "user@example.com", "name": "User", "added_at": 1}), nil
+		case "GET /organization/projects/proj_1/users":
+			return jsonResponse(map[string]any{"data": []any{map[string]any{"id": "user_1", "role": "member", "added_at": 1}}, "has_more": false, "last_id": "user_1"}), nil
+		case "DELETE /organization/projects/proj_1/users/user_1":
+			return jsonResponse(map[string]any{"id": "user_1", "deleted": true}), nil
+		case "POST /organization/projects/proj_1/groups", "GET /organization/projects/proj_1/groups/group_1":
+			return jsonResponse(map[string]any{"project_id": "proj_1", "group_id": "group_1", "group_name": "Group", "group_type": "group", "created_at": 1}), nil
+		case "GET /organization/projects/proj_1/groups":
+			return jsonResponse(map[string]any{"data": []any{map[string]any{"project_id": "proj_1", "group_id": "group_1", "group_name": "Group", "group_type": "group", "created_at": 1}}, "has_more": false, "next": ""}), nil
+		case "DELETE /organization/projects/proj_1/groups/group_1":
+			return jsonResponse(map[string]any{"deleted": true}), nil
+		case "POST /projects/proj_1/users/user_1/roles", "POST /projects/proj_1/groups/group_1/roles":
+			return jsonResponse(map[string]any{"role": role}), nil
+		case "GET /projects/proj_1/users/user_1/roles/role_1", "GET /projects/proj_1/groups/group_1/roles/role_1":
+			return jsonResponse(role), nil
+		case "GET /projects/proj_1/users/user_1/roles", "GET /projects/proj_1/groups/group_1/roles":
+			return jsonResponse(map[string]any{"data": []any{role}, "has_more": false, "next": ""}), nil
+		case "DELETE /projects/proj_1/users/user_1/roles/role_1", "DELETE /projects/proj_1/groups/group_1/roles/role_1":
+			return jsonResponse(map[string]any{"deleted": true}), nil
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		return nil, nil
+	})
+	ctx := context.Background()
+	if _, err := cl.CreateProjectUser(ctx, "proj_1", ProjectUserCreateRequest{UserID: "user_1", Role: "member"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.GetProjectUser(ctx, "proj_1", "user_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.ListProjectUsers(ctx, "proj_1", ProjectUserListRequest{Limit: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.UpdateProjectUser(ctx, "proj_1", "user_1", ProjectUserUpdateRequest{Role: "owner"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.DeleteProjectUser(ctx, "proj_1", "user_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.CreateProjectGroup(ctx, "proj_1", ProjectGroupCreateRequest{GroupID: "group_1", Role: "role_1"}); err != nil {
+		t.Fatal(err)
+	}
+	if group, err := cl.GetProjectGroup(ctx, "proj_1", "group_1", ProjectGroupGetRequest{GroupType: "group"}); err != nil || group.ID != "proj_1/group_1" {
+		t.Fatalf("GetProjectGroup()=%#v,%v", group, err)
+	}
+	if _, err := cl.ListProjectGroups(ctx, "proj_1", ProjectGroupListRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.DeleteProjectGroup(ctx, "proj_1", "group_1"); err != nil {
+		t.Fatal(err)
+	}
+	assignment := RoleAssignmentCreateRequest{RoleID: "role_1"}
+	if _, err := cl.CreateProjectUserRole(ctx, "proj_1", "user_1", assignment); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.GetProjectUserRole(ctx, "proj_1", "user_1", "role_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.ListProjectUserRoles(ctx, "proj_1", "user_1", RoleAssignmentListRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.DeleteProjectUserRole(ctx, "proj_1", "user_1", "role_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.CreateProjectGroupRole(ctx, "proj_1", "group_1", assignment); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.GetProjectGroupRole(ctx, "proj_1", "group_1", "role_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.ListProjectGroupRoles(ctx, "proj_1", "group_1", RoleAssignmentListRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.DeleteProjectGroupRole(ctx, "proj_1", "group_1", "role_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.CreateProjectUser(ctx, "", ProjectUserCreateRequest{UserID: "user_1", Role: "member"}); err == nil {
+		t.Fatal("empty project ID accepted")
+	}
+	if _, err := cl.CreateProjectUser(ctx, "proj_1", ProjectUserCreateRequest{Role: "member"}); err == nil {
+		t.Fatal("missing user identity accepted")
+	}
+}
+
+func TestOpenAIAdminClientSpendAlertUpdateClearsSubjectPrefix(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		path   string
+		update func(*OpenAIAdminClient) error
+	}{
+		{name: "organization", path: "/organization/spend_alerts/alert_1", update: func(cl *OpenAIAdminClient) error {
+			_, err := cl.UpdateOrganizationSpendAlert(context.Background(), "alert_1", SpendAlertUpdateRequest{ThresholdAmount: 1, NotificationChannel: SpendAlertNotificationChannel{Recipients: []string{"ops@example.com"}, SubjectPrefix: ""}})
+			return err
+		}},
+		{name: "project", path: "/organization/projects/proj_1/spend_alerts/alert_1", update: func(cl *OpenAIAdminClient) error {
+			_, err := cl.UpdateProjectSpendAlert(context.Background(), "proj_1", "alert_1", SpendAlertUpdateRequest{ThresholdAmount: 1, NotificationChannel: SpendAlertNotificationChannel{Recipients: []string{"ops@example.com"}, SubjectPrefix: ""}})
+			return err
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cl := testClient(func(r *http.Request) (*http.Response, error) {
+				if r.Method != http.MethodPost || r.URL.Path != test.path {
+					t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+				}
+				var body map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Fatal(err)
+				}
+				channel, ok := body["notification_channel"].(map[string]any)
+				if !ok {
+					t.Fatalf("notification_channel = %#v", body["notification_channel"])
+				}
+				value, exists := channel["subject_prefix"]
+				if !exists || value != nil {
+					t.Fatalf("subject_prefix must be explicit null: %#v", channel)
+				}
+				return jsonResponse(map[string]any{"id": "alert_1", "currency": "USD", "interval": "month", "threshold_amount": 1, "notification_channel": map[string]any{"recipients": []string{"ops@example.com"}, "type": "email"}}), nil
+			})
+			if err := test.update(cl); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

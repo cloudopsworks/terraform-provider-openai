@@ -26,16 +26,16 @@ OpenAI API hierarchy represented here:
         - API Keys
       - API Keys
       - Roles
-      - Users *(evaluated; not implemented yet)*
-        - Roles *(evaluated; not implemented yet)*
-      - Groups *(evaluated; not implemented yet)*
-        - Roles *(evaluated; not implemented yet)*
-      - Rate Limits *(evaluated; not implemented yet)*
-      - Model Permissions *(evaluated; not implemented yet)*
-      - Hosted Tool Permissions *(evaluated; not implemented yet)*
-      - Data Retention *(evaluated; not implemented yet)*
-      - Spend Limit *(evaluated; not implemented yet)*
-      - Spend Alerts *(evaluated; not implemented yet)*
+      - Users
+        - Roles
+      - Groups
+        - Roles
+      - Rate Limits
+      - Model Permissions
+      - Hosted Tool Permissions
+      - Data Retention
+      - Spend Limit
+      - Spend Alerts
       - Certificates *(evaluated; not implemented yet)*
 
 ## Implemented Terraform mapping
@@ -58,23 +58,17 @@ OpenAI API hierarchy represented here:
 | Administration > Organization > Projects > Service Accounts | `docs/api-groups/projects.md` | `openai_service_account`, `openai_service_accounts` |
 | Administration > Organization > Projects > Service Accounts > API Keys | `docs/api-groups/projects.md` | `openai_project_api_key` |
 | Administration > Organization > Projects > Roles | `docs/api-groups/projects.md`, `docs/api-groups/roles-and-assignments.md` | `openai_project_role`, `openai_project_roles` |
+| Administration > Organization > Projects > Users | `docs/api-groups/projects.md` | `openai_project_user`, `openai_project_users` |
+| Administration > Organization > Projects > Users > Roles | `docs/api-groups/projects.md` | `openai_project_user_role`, `openai_project_user_roles` |
+| Administration > Organization > Projects > Groups | `docs/api-groups/projects.md` | `openai_project_group`, `openai_project_groups` |
+| Administration > Organization > Projects > Groups > Roles | `docs/api-groups/projects.md` | `openai_project_group_role`, `openai_project_group_roles` |
+| Administration > Organization > Projects > Data Retention | `docs/api-groups/projects.md` | `openai_project_data_retention` |
+| Administration > Organization > Projects > Spend Limit | `docs/api-groups/projects.md` | `openai_project_spend_limit` |
+| Administration > Organization > Projects > Spend Alerts | `docs/api-groups/projects.md` | `openai_project_spend_alert`, `openai_project_spend_alerts` |
+| Administration > Organization > Projects > Rate Limits | `docs/api-groups/projects.md` | `openai_project_rate_limit`, `openai_project_rate_limits` |
+| Administration > Organization > Projects > Model Permissions | `docs/api-groups/projects.md` | `openai_project_model_permissions` |
+| Administration > Organization > Projects > Hosted Tool Permissions | `docs/api-groups/projects.md` | `openai_project_hosted_tool_permissions` |
 
-## Evaluated but not yet implemented project sub-APIs
+## Remaining project candidates
 
-The current OpenAI Admin API hierarchy also contains these evaluated project
-sub-APIs, which are not implemented yet:
-
-- Administration > Organization > Projects > Users
-- Administration > Organization > Projects > Users > Roles
-- Administration > Organization > Projects > Groups
-- Administration > Organization > Projects > Groups > Roles
-- Administration > Organization > Projects > Rate Limits
-- Administration > Organization > Projects > Model Permissions
-- Administration > Organization > Projects > Hosted Tool Permissions
-- Administration > Organization > Projects > Data Retention
-- Administration > Organization > Projects > Spend Limit
-- Administration > Organization > Projects > Spend Alerts
-- Administration > Organization > Projects > Certificates
-
-Their evaluated implementation path and maintainability guidance are captured in
-`docs/api-groups/organization-controls.md#project-sub-api-evaluation-and-maintainability-opportunities`.
+Project certificates and usage/cost reporting remain candidates for later evaluation; this provider does not currently register Terraform surfaces for them.

@@ -119,29 +119,17 @@ Certificate contents are sensitive:
   source when `include_content = true` and is stored as Sensitive state.
 - List data sources intentionally omit PEM content.
 
-## Project sub-API evaluation and maintainability opportunities
+## Project sub-API status and maintainability opportunities
 
-The OpenAI Go SDK exposes project-scoped administration sub-APIs in addition to
-the organization-wide controls implemented here. Current coverage and suggested
-next work:
+The prior evaluation is now partly implemented. This table is the current status;
+project certificates and usage/cost reporting remain candidates.
 
-| Project sub-API | Current provider coverage | Recommended next step / generalization opportunity |
+| Project sub-API | Current provider coverage | Notes |
 | --- | --- | --- |
-| Project lifecycle | `openai_project`, `openai_projects`, `openai_project` | Continue using the existing project resource/data-source pair; factor singleton ID parsing helpers into a shared import-ID module. |
-| Project users | Not implemented as first-class project membership resources in this round. | Add `openai_project_user` resource/data source and `openai_project_users` list data source. Reuse the organization group-user membership pattern with `project_id/user_id` import IDs. |
-| Project user roles | Not implemented in this round. | Generalize the existing organization user/group role-assignment helpers to accept a scope descriptor (`organization`, `project`) and principal descriptor (`user`, `group`). |
-| Project groups | Not implemented in this round. | Mirror `openai_organization_group_user` as project group membership, with shared add/read/list/delete membership plumbing. |
-| Project group roles | Not implemented in this round. | Reuse the same scoped role-assignment abstraction as project user roles. |
-| Project roles | `openai_project_role`, `openai_project_roles`, `openai_project_role` | Keep existing surface; extract common role create/update/list/delete mapping shared with organization roles. |
-| Service accounts | `openai_service_account`, `openai_service_accounts`, `openai_service_account` | Already uses shared API-key creation when service-account scopes require a scoped bootstrap key. Continue factoring project/service-account/key import ID parsing. |
-| Project API keys | `openai_project_api_key` plus project key list/read through service-account context | Extend read/list coverage for project-level key inventory if OpenAI exposes owner metadata needed by operators. Keep create-only scopes in shared service-account API-key code. |
-| Model permissions | Not implemented in this round. | Add singleton resource/data source using the same create/update-as-upsert pattern as data retention, with explicit delete/reset semantics from the SDK. |
-| Hosted-tool permissions | Not implemented in this round. | Add singleton resource/data source; no delete endpoint exists in the current SDK, so document state-only destroy if exposed as a resource. |
-| Rate limits | Not implemented in this round. | Add data source for model/rate-limit discovery and targeted resource for per-rate-limit update. Reuse pagination and `project_id/rate_limit_id` import parsing. |
-| Project data retention | Not implemented in this round. | Generalize organization data-retention models to a scoped singleton helper keyed by `project_id`. |
-| Project spend limit | Not implemented in this round. | Generalize organization spend-limit models to a scoped singleton helper keyed by `project_id`; keep delete-confirmation logic shared. |
-| Project spend alerts | Not implemented in this round. | Reuse organization spend-alert notification-channel and CRUD/list mapping with `project_id` added to IDs and requests. |
-| Project certificates | Not implemented in this round. | Reuse organization certificate item/details models for project certificate activation/deactivation lists; certificate upload remains organization-level. |
+| Project users and groups | `openai_project_user(s)`, `openai_project_group(s)` | Project-group import is intentionally unavailable: read/list omit the create-only role, so import cannot safely hydrate a no-op state. |
+| Project user and group roles | `openai_project_user_role(s)`, `openai_project_group_role(s)` | Scoped assignment helpers preserve the project/principal/role identity. |
+| Project policies | Project data retention, spend limit, spend alerts, rate limits, model permissions, and hosted-tool permissions | Singleton and targeted policy surfaces are registered under the Projects API group. |
+| Project certificates and usage | Not implemented | Retained as candidates pending documented lifecycle/API review. |
 
 The strongest architectural cleanup opportunity is a small internal framework for
 scoped Admin API surfaces:
