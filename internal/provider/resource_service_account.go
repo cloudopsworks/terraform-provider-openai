@@ -6,6 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -34,6 +35,7 @@ type serviceAccountResourceModel struct {
 	Role                types.String `tfsdk:"role"`
 	CreatedAt           types.Int64  `tfsdk:"created_at"`
 	Scopes              types.Set    `tfsdk:"scopes"`
+	CreateAPIKey        types.Bool   `tfsdk:"create_api_key"`
 	APIKeyID            types.String `tfsdk:"api_key_id"`
 	APIKeyName          types.String `tfsdk:"api_key_name"`
 	APIKeyValue         types.String `tfsdk:"api_key_value"`
@@ -41,6 +43,36 @@ type serviceAccountResourceModel struct {
 	APIKeyCreatedAt     types.Int64  `tfsdk:"api_key_created_at"`
 	APIKeyLastUsedAt    types.Int64  `tfsdk:"api_key_last_used_at"`
 	APIKeyOwnerAccess   types.String `tfsdk:"api_key_owner_project_access"`
+}
+
+// The pre-keyless schema is retained for upgrades of both historical versions.
+type serviceAccountResourceModelV1 struct {
+	ID                  types.String `tfsdk:"id"`
+	ProjectID           types.String `tfsdk:"project_id"`
+	Name                types.String `tfsdk:"name"`
+	Role                types.String `tfsdk:"role"`
+	CreatedAt           types.Int64  `tfsdk:"created_at"`
+	Scopes              types.Set    `tfsdk:"scopes"`
+	APIKeyID            types.String `tfsdk:"api_key_id"`
+	APIKeyName          types.String `tfsdk:"api_key_name"`
+	APIKeyValue         types.String `tfsdk:"api_key_value"`
+	APIKeyRedactedValue types.String `tfsdk:"api_key_redacted_value"`
+	APIKeyCreatedAt     types.Int64  `tfsdk:"api_key_created_at"`
+	APIKeyLastUsedAt    types.Int64  `tfsdk:"api_key_last_used_at"`
+	APIKeyOwnerAccess   types.String `tfsdk:"api_key_owner_project_access"`
+}
+
+func serviceAccountModelV2(prior serviceAccountResourceModelV1) serviceAccountResourceModel {
+	return serviceAccountResourceModel{
+		ID: prior.ID, ProjectID: prior.ProjectID, Name: prior.Name,
+		Role: prior.Role, CreatedAt: prior.CreatedAt, Scopes: prior.Scopes,
+		CreateAPIKey: types.BoolValue(true), APIKeyID: prior.APIKeyID,
+		APIKeyName: prior.APIKeyName, APIKeyValue: prior.APIKeyValue,
+		APIKeyRedactedValue: prior.APIKeyRedactedValue,
+		APIKeyCreatedAt:     prior.APIKeyCreatedAt,
+		APIKeyLastUsedAt:    prior.APIKeyLastUsedAt,
+		APIKeyOwnerAccess:   prior.APIKeyOwnerAccess,
+	}
 }
 
 func NewServiceAccountResource() resource.Resource { return &serviceAccountResource{} }
@@ -51,14 +83,15 @@ func (r *serviceAccountResource) Metadata(_ context.Context, req resource.Metada
 
 func (r *serviceAccountResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = resourceschema.Schema{
-		Version:             1,
+		Version:             2,
 		MarkdownDescription: "OpenAI project service account. OpenAI creates and returns a default API key during service-account creation unless scopes are configured; scoped bootstrap keys are created through the service-account API-key endpoint.",
 		Attributes: map[string]resourceschema.Attribute{
-			"id":         resourceschema.StringAttribute{Computed: true, MarkdownDescription: "OpenAI service account ID."},
-			"project_id": resourceschema.StringAttribute{Required: true, MarkdownDescription: "OpenAI project ID that owns the service account.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
-			"name":       resourceschema.StringAttribute{Required: true, MarkdownDescription: "Service account name."},
-			"role":       resourceschema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("member"), MarkdownDescription: "Project role for the service account. Supported values are member and owner.", Validators: []validator.String{serviceAccountRoleValidator{}}},
-			"created_at": resourceschema.Int64Attribute{Computed: true, MarkdownDescription: "Unix timestamp for service-account creation."},
+			"id":             resourceschema.StringAttribute{Computed: true, MarkdownDescription: "OpenAI service account ID."},
+			"project_id":     resourceschema.StringAttribute{Required: true, MarkdownDescription: "OpenAI project ID that owns the service account.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
+			"name":           resourceschema.StringAttribute{Required: true, MarkdownDescription: "Service account name."},
+			"role":           resourceschema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("member"), MarkdownDescription: "Project role for the service account. Supported values are member and owner.", Validators: []validator.String{serviceAccountRoleValidator{}}},
+			"created_at":     resourceschema.Int64Attribute{Computed: true, MarkdownDescription: "Unix timestamp for service-account creation."},
+			"create_api_key": resourceschema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(true), MarkdownDescription: "Create and manage a bootstrap API key. Set false to manage only the service-account identity; existing API keys are left untouched when switching to false."},
 
 			"scopes": resourceschema.SetAttribute{
 				Optional:            true,
@@ -82,13 +115,25 @@ func (r *serviceAccountResource) UpgradeState(_ context.Context) map[int64]resou
 		0: {
 			PriorSchema: serviceAccountResourceV0Schema(),
 			StateUpgrader: func(ctx context.Context, req resource.UpgradeStateRequest, resp *resource.UpgradeStateResponse) {
-				var prior serviceAccountResourceModel
+				var prior serviceAccountResourceModelV1
 				resp.Diagnostics.Append(req.State.Get(ctx, &prior)...)
 				if resp.Diagnostics.HasError() {
 					return
 				}
 				resp.State.Schema = serviceAccountResourceCurrentSchema()
-				resp.Diagnostics.Append(resp.State.Set(ctx, &prior)...)
+				resp.Diagnostics.Append(resp.State.Set(ctx, serviceAccountModelV2(prior))...)
+			},
+		},
+		1: {
+			PriorSchema: serviceAccountResourceV1Schema(),
+			StateUpgrader: func(ctx context.Context, req resource.UpgradeStateRequest, resp *resource.UpgradeStateResponse) {
+				var prior serviceAccountResourceModelV1
+				resp.Diagnostics.Append(req.State.Get(ctx, &prior)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+				resp.State.Schema = serviceAccountResourceCurrentSchema()
+				resp.Diagnostics.Append(resp.State.Set(ctx, serviceAccountModelV2(prior))...)
 			},
 		},
 	}
@@ -121,13 +166,18 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	createScopedKey := len(scopes) > 0
-	account, err := r.client.CreateServiceAccount(ctx, plan.ProjectID.ValueString(), client.ServiceAccountCreateRequest{Name: plan.Name.ValueString(), Role: plan.Role.ValueString(), CreateServiceAccountOnly: createScopedKey})
+	createAPIKey := plan.CreateAPIKey.IsNull() || plan.CreateAPIKey.ValueBool()
+	createScopedKey := createAPIKey && len(scopes) > 0
+	account, err := r.client.CreateServiceAccount(ctx, plan.ProjectID.ValueString(), client.ServiceAccountCreateRequest{Name: plan.Name.ValueString(), Role: plan.Role.ValueString(), CreateServiceAccountOnly: !createAPIKey || createScopedKey})
 	if err != nil {
 		addClientError(&resp.Diagnostics, "Unable to create OpenAI service account", err)
 		return
 	}
 	state := serviceAccountModelFromAPI(account, plan)
+	state.CreateAPIKey = types.BoolValue(createAPIKey)
+	if !createAPIKey {
+		clearServiceAccountAPIKey(&state)
+	}
 	if createScopedKey {
 		apiKey, err := createProjectAPIKey(ctx, r.client, plan.ProjectID.ValueString(), account.ID, plan.Name.ValueString(), scopes)
 		if err != nil {
@@ -158,6 +208,9 @@ func (r *serviceAccountResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 	newState := serviceAccountModelFromAPI(account, state)
+	if !newState.CreateAPIKey.IsNull() && !newState.CreateAPIKey.ValueBool() {
+		clearServiceAccountAPIKey(&newState)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &newState)...)
 }
 
@@ -176,14 +229,34 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 		resp.Diagnostics.AddAttributeError(path.Root("role"), "Invalid OpenAI service account role", "Supported values are member and owner.")
 		return
 	}
-	account, err := r.client.UpdateServiceAccount(ctx, plan.ProjectID.ValueString(), plan.ID.ValueString(), client.ServiceAccountUpdateRequest{Name: plan.Name.ValueString(), Role: plan.Role.ValueString()})
-	if err != nil {
-		addClientError(&resp.Diagnostics, "Unable to update OpenAI service account", err)
-		return
+	newState := state
+	if !plan.Name.Equal(state.Name) || !plan.Role.Equal(state.Role) {
+		account, err := r.client.UpdateServiceAccount(ctx, state.ProjectID.ValueString(), state.ID.ValueString(), client.ServiceAccountUpdateRequest{Name: plan.Name.ValueString(), Role: plan.Role.ValueString()})
+		if err != nil {
+			addClientError(&resp.Diagnostics, "Unable to update OpenAI service account", err)
+			return
+		}
+		newState = serviceAccountModelFromAPI(account, state)
 	}
-	newState := serviceAccountModelFromAPI(account, state)
 	newState.Name = plan.Name
 	newState.Role = plan.Role
+	createAPIKey := plan.CreateAPIKey.IsNull() || plan.CreateAPIKey.ValueBool()
+	newState.CreateAPIKey = types.BoolValue(createAPIKey)
+	if !createAPIKey {
+		clearServiceAccountAPIKey(&newState)
+	} else if !state.CreateAPIKey.IsNull() && !state.CreateAPIKey.ValueBool() {
+		scopes, scopeDiags := setToStringSlice(ctx, plan.Scopes)
+		resp.Diagnostics.Append(scopeDiags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		apiKey, err := createProjectAPIKey(ctx, r.client, state.ProjectID.ValueString(), state.ID.ValueString(), plan.Name.ValueString(), scopes)
+		if err != nil {
+			addClientError(&resp.Diagnostics, "Unable to create OpenAI service account API key", err)
+			return
+		}
+		newState = serviceAccountModelWithAPIKeyCreate(apiKey, newState)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &newState)...)
 }
 
@@ -193,7 +266,7 @@ func (r *serviceAccountResource) Delete(ctx context.Context, req resource.Delete
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if !state.APIKeyID.IsNull() && !state.APIKeyID.IsUnknown() && state.APIKeyID.ValueString() != "" {
+	if (state.CreateAPIKey.IsNull() || state.CreateAPIKey.ValueBool()) && !state.APIKeyID.IsNull() && !state.APIKeyID.IsUnknown() && state.APIKeyID.ValueString() != "" {
 		if err := r.client.DeleteProjectAPIKey(ctx, state.ProjectID.ValueString(), state.APIKeyID.ValueString()); err != nil && !client.IsNotFound(err) {
 			addClientError(&resp.Diagnostics, "Unable to delete OpenAI service account API key", err)
 			return
@@ -225,6 +298,7 @@ func serviceAccountModelFromAPI(account *client.ServiceAccount, prior serviceAcc
 		Role:                stringOrNull(account.Role),
 		CreatedAt:           int64OrNull(account.CreatedAt),
 		Scopes:              setOrNull(prior.Scopes),
+		CreateAPIKey:        prior.CreateAPIKey,
 		APIKeyID:            stringOrNullFromState(prior.APIKeyID),
 		APIKeyName:          stringOrNullFromState(prior.APIKeyName),
 		APIKeyValue:         stringOrNullFromState(prior.APIKeyValue),
@@ -237,6 +311,16 @@ func serviceAccountModelFromAPI(account *client.ServiceAccount, prior serviceAcc
 		state = serviceAccountModelWithAPIKeyCreate(account.APIKey, state)
 	}
 	return state
+}
+
+func clearServiceAccountAPIKey(state *serviceAccountResourceModel) {
+	state.APIKeyID = types.StringNull()
+	state.APIKeyName = types.StringNull()
+	state.APIKeyValue = types.StringNull()
+	state.APIKeyRedactedValue = types.StringNull()
+	state.APIKeyCreatedAt = types.Int64Null()
+	state.APIKeyLastUsedAt = types.Int64Null()
+	state.APIKeyOwnerAccess = types.StringNull()
 }
 
 func serviceAccountModelWithAPIKeyCreate(apiKey *client.ServiceAccountAPIKeyCreateResponse, state serviceAccountResourceModel) serviceAccountResourceModel {
@@ -266,11 +350,18 @@ func serviceAccountResourceCurrentSchema() resourceschema.Schema {
 }
 
 func serviceAccountResourceV0Schema() *resourceschema.Schema {
-	schema := serviceAccountResourceCurrentSchema()
+	schema := *serviceAccountResourceV1Schema()
 	schema.Version = 0
 	roleAttr := schema.Attributes["role"].(resourceschema.StringAttribute)
 	roleAttr.Validators = nil
 	schema.Attributes["role"] = roleAttr
+	return &schema
+}
+
+func serviceAccountResourceV1Schema() *resourceschema.Schema {
+	schema := serviceAccountResourceCurrentSchema()
+	schema.Version = 1
+	delete(schema.Attributes, "create_api_key")
 	return &schema
 }
 
