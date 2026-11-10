@@ -16,6 +16,11 @@ API key through the same API-key creation path used by `openai_project_api_key`.
 Use `openai_project_api_key` for additional standalone keys or independent key
 rotation.
 
+Set `create_api_key = false` to create only the service-account identity. The
+provider still applies the requested role, but does not create or retain a
+bootstrap key. This is the mode to use when an external rotation function owns
+all API keys for the account.
+
 ## Example Usage
 
 Default OpenAI bootstrap key:
@@ -48,6 +53,17 @@ resource "openai_service_account" "scoped" {
 }
 ```
 
+Identity only, with API keys owned by another system:
+
+```terraform
+resource "openai_service_account" "rotating" {
+  project_id     = openai_project.app.id
+  name           = "example-rotating-app"
+  role           = "member"
+  create_api_key = false
+}
+```
+
 ## Import
 
 ```sh
@@ -67,6 +83,7 @@ created the key.
 
 ### Optional
 
+- `create_api_key` (Boolean) Whether the provider creates and manages a bootstrap API key. Defaults to `true`. Setting `false` leaves existing remote keys untouched and clears their historical attributes from the current resource state without replacing the service account.
 - `role` (String) Project role for the service account. Defaults to `member`. Supported values are `member` and `owner`.
 - `scopes` (Set of String) Optional scopes for the bootstrap API key. Non-empty scopes use the two-step create path: service account without a default key, then scoped service-account API key creation. Scope changes replace the service account and bootstrap key.
 
@@ -87,5 +104,7 @@ created the key.
 - Treat Terraform state and plan artifacts as secret material whenever they contain `api_key_value`.
 - Without `scopes`, OpenAI creates the default service-account API key and the provider captures it.
 - With non-empty `scopes`, the provider suppresses the default key and creates one scoped API key through OpenAI's service-account API-key endpoint.
+- Switching an existing account to `create_api_key = false` does not revoke its former bootstrap key. The external key owner must reconcile that key. Prior Terraform state snapshots and stored secret versions can still contain its value; handle them under your secret-retention policy.
+- Switching back to `create_api_key = true` creates a new service-account key without replacing the account. Coordinate that handoff with the external owner; it does not automatically revoke externally owned keys.
 - Use `openai_project_api_key` when you need additional standalone keys for the same service account.
 - Deleting the resource deletes the captured bootstrap key first when known, then deletes the service account.

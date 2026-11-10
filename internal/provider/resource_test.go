@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -1097,6 +1098,139 @@ func TestServiceAccountResourceCreatesScopedAPIKeyWithMockClient(t *testing.T) {
 	}
 }
 
+func TestServiceAccountResourceIdentityOnlyAndHandoff(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeAdminClient{}
+	r := &serviceAccountResource{client: fake}
+	schema := resourceSchema(ctx, t, r)
+	plan := tfsdk.Plan{Schema: schema}
+	if diags := plan.Set(ctx, &serviceAccountResourceModel{
+		ProjectID: types.StringValue("proj_1"), Name: types.StringValue("svc"),
+		Role: types.StringValue("member"), Scopes: types.SetNull(types.StringType),
+		CreateAPIKey: types.BoolValue(false),
+	}); diags.HasError() {
+		t.Fatalf("plan set: %v", diags)
+	}
+	createResp := resource.CreateResponse{State: tfsdk.State{Schema: schema}}
+	r.Create(ctx, resource.CreateRequest{Plan: plan}, &createResp)
+	if createResp.Diagnostics.HasError() {
+		t.Fatalf("create diagnostics: %v", createResp.Diagnostics)
+	}
+	if !fake.createdAccountReq.CreateServiceAccountOnly || fake.createdKey != nil {
+		t.Fatalf("identity-only creation created a key: request=%#v key=%#v", fake.createdAccountReq, fake.createdKey)
+	}
+	var created serviceAccountResourceModel
+	if diags := createResp.State.Get(ctx, &created); diags.HasError() {
+		t.Fatalf("created state: %v", diags)
+	}
+	if created.ID.ValueString() != "sa_1" || !created.APIKeyID.IsNull() || !created.APIKeyValue.IsNull() || created.CreateAPIKey.ValueBool() {
+		t.Fatalf("identity-only state retained key material: %#v", created)
+	}
+	deleteResp := resource.DeleteResponse{State: createResp.State}
+	r.Delete(ctx, resource.DeleteRequest{State: createResp.State}, &deleteResp)
+	if deleteResp.Diagnostics.HasError() || fake.deletedAccount != "sa_1" || fake.deletedKey != "" {
+		t.Fatalf("identity-only deletion touched a key: diagnostics=%v account=%q key=%q", deleteResp.Diagnostics, fake.deletedAccount, fake.deletedKey)
+	}
+
+	// Existing bootstrapped state relinquishes the key without a remote DELETE.
+	fake = &fakeAdminClient{}
+	r.client = fake
+	oldPlan := tfsdk.Plan{Schema: schema}
+	if diags := oldPlan.Set(ctx, &serviceAccountResourceModel{
+		ProjectID: types.StringValue("proj_1"), Name: types.StringValue("svc"),
+		Role: types.StringValue("member"), Scopes: types.SetNull(types.StringType),
+		CreateAPIKey: types.BoolValue(true),
+	}); diags.HasError() {
+		t.Fatalf("old plan: %v", diags)
+	}
+	oldResp := resource.CreateResponse{State: tfsdk.State{Schema: schema}}
+	r.Create(ctx, resource.CreateRequest{Plan: oldPlan}, &oldResp)
+	if oldResp.Diagnostics.HasError() {
+		t.Fatalf("old create: %v", oldResp.Diagnostics)
+	}
+	newPlan := tfsdk.Plan{Schema: schema}
+	if diags := newPlan.Set(ctx, &serviceAccountResourceModel{
+		ID: types.StringValue("sa_1"), ProjectID: types.StringValue("proj_1"),
+		Name: types.StringValue("svc"), Role: types.StringValue("member"),
+		Scopes: types.SetNull(types.StringType), CreateAPIKey: types.BoolValue(false),
+	}); diags.HasError() {
+		t.Fatalf("handoff plan: %v", diags)
+	}
+	updateResp := resource.UpdateResponse{State: tfsdk.State{Schema: schema}}
+	r.Update(ctx, resource.UpdateRequest{Plan: newPlan, State: oldResp.State}, &updateResp)
+	if updateResp.Diagnostics.HasError() {
+		t.Fatalf("handoff update: %v", updateResp.Diagnostics)
+	}
+	var handedOff serviceAccountResourceModel
+	if diags := updateResp.State.Get(ctx, &handedOff); diags.HasError() {
+		t.Fatalf("handoff state: %v", diags)
+	}
+	if handedOff.ID.ValueString() != "sa_1" || !handedOff.APIKeyID.IsNull() || !handedOff.APIKeyValue.IsNull() || fake.deletedKey != "" || fake.deletedAccount != "" || fake.updatedAccountID != "" {
+		t.Fatalf("handoff replaced account or called OpenAI: %#v updatedAccount=%q deletedAccount=%q deletedKey=%q", handedOff, fake.updatedAccountID, fake.deletedAccount, fake.deletedKey)
+	}
+	readResp := resource.ReadResponse{State: updateResp.State}
+	r.Read(ctx, resource.ReadRequest{State: updateResp.State}, &readResp)
+	if readResp.Diagnostics.HasError() {
+		t.Fatalf("handoff read: %v", readResp.Diagnostics)
+	}
+	var refreshed serviceAccountResourceModel
+	if diags := readResp.State.Get(ctx, &refreshed); diags.HasError() || !refreshed.APIKeyID.IsNull() {
+		t.Fatalf("handoff read restored old key: state=%#v diagnostics=%v", refreshed, diags)
+	}
+}
+
+func TestServiceAccountResourceRegainsKeyOwnershipWithUnknownPlannedID(t *testing.T) {
+	for _, rename := range []bool{false, true} {
+		t.Run(fmt.Sprintf("rename=%t", rename), func(t *testing.T) {
+			ctx := context.Background()
+			fake := &fakeAdminClient{account: &client.ServiceAccount{ID: "sa_1", Name: "svc", Role: "member"}}
+			r := &serviceAccountResource{client: fake}
+			schema := resourceSchema(ctx, t, r)
+			state := tfsdk.State{Schema: schema}
+			if diags := state.Set(ctx, &serviceAccountResourceModel{
+				ID: types.StringValue("sa_1"), ProjectID: types.StringValue("proj_1"),
+				Name: types.StringValue("svc"), Role: types.StringValue("member"),
+				Scopes: types.SetNull(types.StringType), CreateAPIKey: types.BoolValue(false),
+			}); diags.HasError() {
+				t.Fatalf("prior state: %v", diags)
+			}
+			name := "svc"
+			if rename {
+				name = "svc-renamed"
+			}
+			plan := tfsdk.Plan{Schema: schema}
+			if diags := plan.Set(ctx, &serviceAccountResourceModel{
+				ID: types.StringUnknown(), ProjectID: types.StringValue("proj_1"),
+				Name: types.StringValue(name), Role: types.StringValue("member"),
+				Scopes: types.SetNull(types.StringType), CreateAPIKey: types.BoolValue(true),
+			}); diags.HasError() {
+				t.Fatalf("update plan: %v", diags)
+			}
+			resp := resource.UpdateResponse{State: tfsdk.State{Schema: schema}}
+			r.Update(ctx, resource.UpdateRequest{Plan: plan, State: state}, &resp)
+			if resp.Diagnostics.HasError() {
+				t.Fatalf("update diagnostics: %v", resp.Diagnostics)
+			}
+			if fake.createdKeyProjectID != "proj_1" || fake.createdKeyAccountID != "sa_1" || fake.createdKeyReq.Name != name {
+				t.Fatalf("key creation targeted wrong identity: project=%q account=%q name=%q", fake.createdKeyProjectID, fake.createdKeyAccountID, fake.createdKeyReq.Name)
+			}
+			if rename && fake.updatedAccountID != "sa_1" {
+				t.Fatalf("metadata update targeted account %q", fake.updatedAccountID)
+			}
+			var updated serviceAccountResourceModel
+			if diags := resp.State.Get(ctx, &updated); diags.HasError() {
+				t.Fatalf("updated state: %v", diags)
+			}
+			if updated.ID.ValueString() != "sa_1" || !updated.CreateAPIKey.ValueBool() || updated.APIKeyID.ValueString() != "key_1" || updated.APIKeyValue.ValueString() != "sk-created" {
+				t.Fatal("reverse handoff did not preserve identity and capture the new key")
+			}
+			if fake.deletedKey != "" || fake.deletedAccount != "" {
+				t.Fatal("reverse handoff deleted an externally owned key or account")
+			}
+		})
+	}
+}
+
 func TestServiceAccountResourceReadDriftAndNotFoundWithMockClient(t *testing.T) {
 	ctx := context.Background()
 	schema := resourceSchema(ctx, t, &serviceAccountResource{})
@@ -1284,8 +1418,8 @@ func TestServiceAccountResourceSchemaContract(t *testing.T) {
 	ctx := context.Background()
 	r := NewServiceAccountResource()
 	schema := resourceSchema(ctx, t, r)
-	if schema.Version != 1 {
-		t.Fatalf("schema version = %d, want 1", schema.Version)
+	if schema.Version != 2 {
+		t.Fatalf("schema version = %d, want 2", schema.Version)
 	}
 	if _, ok := r.(resource.ResourceWithUpgradeState); !ok {
 		t.Fatal("service account resource must implement ResourceWithUpgradeState")
@@ -1340,6 +1474,10 @@ func TestServiceAccountResourceSchemaContract(t *testing.T) {
 	if attr := setAttr("scopes"); !attr.Optional || attr.Required || attr.Computed || len(attr.PlanModifiers) != 1 || attr.ElementType != types.StringType {
 		t.Fatalf("scopes schema flags mismatch: %#v", attr)
 	}
+	createKey, ok := schema.Attributes["create_api_key"].(resourceschema.BoolAttribute)
+	if !ok || !createKey.Optional || !createKey.Computed || createKey.Required || createKey.Default == nil {
+		t.Fatalf("create_api_key schema flags mismatch: %#v", schema.Attributes["create_api_key"])
+	}
 	for _, name := range []string{"api_key_id", "api_key_name", "api_key_redacted_value", "api_key_owner_project_access"} {
 		if attr := stringAttr(name); !attr.Computed || attr.Required || attr.Optional {
 			t.Fatalf("%s schema flags mismatch: %#v", name, attr)
@@ -1391,7 +1529,7 @@ func TestServiceAccountResourceUpgradeStatePreservesV0State(t *testing.T) {
 		t.Fatalf("unexpected prior schema: %#v", upgrader.PriorSchema)
 	}
 	prior := tfsdk.State{Schema: *upgrader.PriorSchema}
-	if diags := prior.Set(ctx, &serviceAccountResourceModel{
+	if diags := prior.Set(ctx, &serviceAccountResourceModelV1{
 		ID:        types.StringValue("sa_1"),
 		ProjectID: types.StringValue("proj_1"),
 		Name:      types.StringValue("svc"),
@@ -1413,6 +1551,36 @@ func TestServiceAccountResourceUpgradeStatePreservesV0State(t *testing.T) {
 	}
 	if upgraded.ID.ValueString() != "sa_1" || upgraded.ProjectID.ValueString() != "proj_1" || upgraded.Name.ValueString() != "svc" || upgraded.Role.ValueString() != "owner" || upgraded.CreatedAt.ValueInt64() != 11 {
 		t.Fatalf("unexpected upgraded state: %#v", upgraded)
+	}
+}
+
+func TestServiceAccountResourceUpgradeStatePreservesV1Key(t *testing.T) {
+	ctx := context.Background()
+	r := &serviceAccountResource{}
+	upgrader, ok := r.UpgradeState(ctx)[1]
+	if !ok || upgrader.PriorSchema == nil || upgrader.PriorSchema.Version != 1 {
+		t.Fatalf("missing v1 state upgrader: %#v", upgrader)
+	}
+	prior := tfsdk.State{Schema: *upgrader.PriorSchema}
+	if diags := prior.Set(ctx, &serviceAccountResourceModelV1{
+		ID: types.StringValue("sa_1"), ProjectID: types.StringValue("proj_1"),
+		Name: types.StringValue("svc"), Role: types.StringValue("member"),
+		Scopes: types.SetNull(types.StringType), APIKeyID: types.StringValue("old_key"),
+		APIKeyValue: types.StringValue("old_secret"),
+	}); diags.HasError() {
+		t.Fatalf("prior set: %v", diags)
+	}
+	resp := resource.UpgradeStateResponse{}
+	upgrader.StateUpgrader(ctx, resource.UpgradeStateRequest{State: &prior}, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("upgrade diagnostics: %v", resp.Diagnostics)
+	}
+	var upgraded serviceAccountResourceModel
+	if diags := resp.State.Get(ctx, &upgraded); diags.HasError() {
+		t.Fatalf("upgraded get: %v", diags)
+	}
+	if upgraded.ID.ValueString() != "sa_1" || !upgraded.CreateAPIKey.ValueBool() || upgraded.APIKeyID.ValueString() != "old_key" || upgraded.APIKeyValue.ValueString() != "old_secret" {
+		t.Fatalf("v1 upgrade lost account/key state: %#v", upgraded)
 	}
 }
 
