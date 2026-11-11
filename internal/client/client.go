@@ -162,7 +162,7 @@ func (c *OpenAIAdminClient) CreateServiceAccount(ctx context.Context, projectID 
 	if req.CreateServiceAccountOnly {
 		params.CreateServiceAccountOnly = openai.Bool(true)
 	}
-	created, err := c.client.Admin.Organization.Projects.ServiceAccounts.New(ctx, projectID, params)
+	created, err := c.client.Admin.Organization.Projects.ServiceAccounts.New(ctx, projectID, params, option.WithMaxRetries(0))
 	if err != nil {
 		return nil, err
 	}
@@ -179,14 +179,42 @@ func (c *OpenAIAdminClient) CreateServiceAccount(ctx context.Context, projectID 
 	}
 	if req.Role != "" && req.Role != account.Role {
 		// The name was set by creation; this request only assigns the project role.
-		updated, err := c.UpdateServiceAccount(ctx, projectID, account.ID, ServiceAccountUpdateRequest{Role: req.Role})
+		updated, err := c.assignCreatedServiceAccountRole(ctx, projectID, account.ID, req.Role)
 		if err != nil {
-			return nil, err
+			return account, err
 		}
 		updated.APIKey = account.APIKey
 		return updated, nil
 	}
 	return account, nil
+}
+
+// Newly created identities can take a few seconds to reach the role-assignment endpoint.
+// Retry only that endpoint, never the non-idempotent account creation request.
+func (c *OpenAIAdminClient) assignCreatedServiceAccountRole(ctx context.Context, projectID, serviceAccountID, role string) (*ServiceAccount, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	delay := 250 * time.Millisecond
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		account, err := c.updateServiceAccount(ctx, projectID, serviceAccountID, ServiceAccountUpdateRequest{Role: role}, option.WithMaxRetries(0))
+		if !IsNotFound(err) {
+			return account, err
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+		if delay < 2*time.Second {
+			delay *= 2
+		}
+	}
 }
 
 func (c *OpenAIAdminClient) GetServiceAccount(ctx context.Context, projectID, serviceAccountID string) (*ServiceAccount, error) {
@@ -229,6 +257,10 @@ func (c *OpenAIAdminClient) ListServiceAccounts(ctx context.Context, projectID s
 }
 
 func (c *OpenAIAdminClient) UpdateServiceAccount(ctx context.Context, projectID, serviceAccountID string, req ServiceAccountUpdateRequest) (*ServiceAccount, error) {
+	return c.updateServiceAccount(ctx, projectID, serviceAccountID, req)
+}
+
+func (c *OpenAIAdminClient) updateServiceAccount(ctx context.Context, projectID, serviceAccountID string, req ServiceAccountUpdateRequest, opts ...option.RequestOption) (*ServiceAccount, error) {
 	params := openai.AdminOrganizationProjectServiceAccountUpdateParams{}
 	if req.Name != "" {
 		params.Name = openai.String(req.Name)
@@ -239,7 +271,7 @@ func (c *OpenAIAdminClient) UpdateServiceAccount(ctx context.Context, projectID,
 	case "member":
 		params.Role = openai.AdminOrganizationProjectServiceAccountUpdateParamsRoleMember
 	}
-	account, err := c.client.Admin.Organization.Projects.ServiceAccounts.Update(ctx, projectID, serviceAccountID, params)
+	account, err := c.client.Admin.Organization.Projects.ServiceAccounts.Update(ctx, projectID, serviceAccountID, params, opts...)
 	if err != nil {
 		return nil, err
 	}
