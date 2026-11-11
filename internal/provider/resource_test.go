@@ -190,8 +190,12 @@ func (f *fakeAdminClient) UpdateServiceAccount(ctx context.Context, projectID, s
 	f.updatedAccountProjectID = projectID
 	f.updatedAccountID = serviceAccountID
 	f.updatedAccountReq = req
-	f.account.Name = req.Name
-	f.account.Role = req.Role
+	if req.Name != "" {
+		f.account.Name = req.Name
+	}
+	if req.Role != "" {
+		f.account.Role = req.Role
+	}
 	return f.account, nil
 }
 func (f *fakeAdminClient) DeleteServiceAccount(ctx context.Context, projectID, serviceAccountID string) error {
@@ -1028,6 +1032,60 @@ func TestServiceAccountResourceLifecycleWithMockClient(t *testing.T) {
 	r.Delete(ctx, resource.DeleteRequest{State: readResp.State}, &deleteResp)
 	if deleteResp.Diagnostics.HasError() || fake.deletedKey != "key_default" || fake.deletedAccount != "sa_1" {
 		t.Fatalf("delete diagnostics=%v deletedKey=%q deletedAccount=%q", deleteResp.Diagnostics, fake.deletedKey, fake.deletedAccount)
+	}
+}
+
+func TestServiceAccountResourceUpdatesOnlyChangedFields(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		newName string
+		newRole string
+		want    client.ServiceAccountUpdateRequest
+	}{
+		{name: "role only", newName: "svc", newRole: "owner", want: client.ServiceAccountUpdateRequest{Role: "owner"}},
+		{name: "name only", newName: "renamed", newRole: "member", want: client.ServiceAccountUpdateRequest{Name: "renamed"}},
+		{name: "name and role", newName: "renamed", newRole: "owner", want: client.ServiceAccountUpdateRequest{Name: "renamed", Role: "owner"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			fake := &fakeAdminClient{}
+			r := &serviceAccountResource{client: fake}
+			schema := resourceSchema(ctx, t, r)
+			model := serviceAccountResourceModel{
+				ProjectID: types.StringValue("proj_1"), Name: types.StringValue("svc"),
+				Role: types.StringValue("member"), Scopes: types.SetNull(types.StringType),
+				CreateAPIKey: types.BoolValue(false),
+			}
+			plan := tfsdk.Plan{Schema: schema}
+			if diags := plan.Set(ctx, &model); diags.HasError() {
+				t.Fatalf("plan set: %v", diags)
+			}
+			created := resource.CreateResponse{State: tfsdk.State{Schema: schema}}
+			r.Create(ctx, resource.CreateRequest{Plan: plan}, &created)
+			if created.Diagnostics.HasError() {
+				t.Fatalf("create: %v", created.Diagnostics)
+			}
+			model.Name = types.StringValue(tc.newName)
+			model.Role = types.StringValue(tc.newRole)
+			if diags := plan.Set(ctx, &model); diags.HasError() {
+				t.Fatalf("updated plan set: %v", diags)
+			}
+			updated := resource.UpdateResponse{State: created.State}
+			r.Update(ctx, resource.UpdateRequest{Plan: plan, State: created.State}, &updated)
+			if updated.Diagnostics.HasError() {
+				t.Fatalf("update: %v", updated.Diagnostics)
+			}
+			if fake.updatedAccountReq != tc.want || fake.updatedAccountProjectID != "proj_1" || fake.updatedAccountID != "sa_1" {
+				t.Fatalf("unexpected update: project=%q id=%q request=%#v", fake.updatedAccountProjectID, fake.updatedAccountID, fake.updatedAccountReq)
+			}
+			var result serviceAccountResourceModel
+			if diags := updated.State.Get(ctx, &result); diags.HasError() {
+				t.Fatalf("state get: %v", diags)
+			}
+			if result.Name.ValueString() != tc.newName || result.Role.ValueString() != tc.newRole || !result.APIKeyValue.IsNull() || fake.createdKey != nil {
+				t.Fatal("update did not preserve identity-only state")
+			}
+		})
 	}
 }
 

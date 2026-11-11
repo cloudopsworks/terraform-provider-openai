@@ -104,6 +104,8 @@ created the key.
 - Treat Terraform state and plan artifacts as secret material whenever they contain `api_key_value`.
 - Without `scopes`, OpenAI creates the default service-account API key and the provider captures it.
 - With non-empty `scopes`, the provider suppresses the default key and creates one scoped API key through OpenAI's service-account API-key endpoint.
+- Identity-only creation assigns the requested project role in a separate, role-only request. Normal updates send only changed name/role fields.
+- If an apply fails after creating an identity but before assigning its role, inspect remote service accounts and Terraform state before retrying. An untracked account with role `none` can remain; repeated creates can produce duplicate names. Reconcile exact IDs and existing credential bindings before importing or deleting anything.
 - Switching an existing account to `create_api_key = false` does not revoke its former bootstrap key. The external key owner must reconcile that key. Prior Terraform state snapshots and stored secret versions can still contain its value; handle them under your secret-retention policy.
 - Switching back to `create_api_key = true` creates a new service-account key without replacing the account. Coordinate that handoff with the external owner; it does not automatically revoke externally owned keys.
 - Use `openai_project_api_key` when you need additional standalone keys for the same service account.

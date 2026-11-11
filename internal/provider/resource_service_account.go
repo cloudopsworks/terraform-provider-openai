@@ -231,7 +231,14 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 	}
 	newState := state
 	if !plan.Name.Equal(state.Name) || !plan.Role.Equal(state.Role) {
-		account, err := r.client.UpdateServiceAccount(ctx, state.ProjectID.ValueString(), state.ID.ValueString(), client.ServiceAccountUpdateRequest{Name: plan.Name.ValueString(), Role: plan.Role.ValueString()})
+		update := client.ServiceAccountUpdateRequest{}
+		if !plan.Name.Equal(state.Name) {
+			update.Name = plan.Name.ValueString()
+		}
+		if !plan.Role.Equal(state.Role) {
+			update.Role = plan.Role.ValueString()
+		}
+		account, err := r.client.UpdateServiceAccount(ctx, state.ProjectID.ValueString(), state.ID.ValueString(), update)
 		if err != nil {
 			addClientError(&resp.Diagnostics, "Unable to update OpenAI service account", err)
 			return

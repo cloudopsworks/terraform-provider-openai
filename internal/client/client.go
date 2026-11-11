@@ -178,7 +178,8 @@ func (c *OpenAIAdminClient) CreateServiceAccount(ctx context.Context, projectID 
 		account.APIKey = apiKey
 	}
 	if req.Role != "" && req.Role != account.Role {
-		updated, err := c.UpdateServiceAccount(ctx, projectID, account.ID, ServiceAccountUpdateRequest{Name: req.Name, Role: req.Role})
+		// The name was set by creation; this request only assigns the project role.
+		updated, err := c.UpdateServiceAccount(ctx, projectID, account.ID, ServiceAccountUpdateRequest{Role: req.Role})
 		if err != nil {
 			return nil, err
 		}
