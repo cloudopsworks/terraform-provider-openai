@@ -170,6 +170,17 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 	createScopedKey := createAPIKey && len(scopes) > 0
 	account, err := r.client.CreateServiceAccount(ctx, plan.ProjectID.ValueString(), client.ServiceAccountCreateRequest{Name: plan.Name.ValueString(), Role: plan.Role.ValueString(), CreateServiceAccountOnly: !createAPIKey || createScopedKey})
 	if err != nil {
+		// Creation may have succeeded before project-role propagation failed.
+		// Retain that exact identity (and any bootstrap key) so Terraform can
+		// recover or destroy it instead of leaving an untracked account behind.
+		if account != nil && account.ID != "" {
+			state := serviceAccountModelFromAPI(account, plan)
+			state.CreateAPIKey = types.BoolValue(createAPIKey)
+			if !createAPIKey {
+				clearServiceAccountAPIKey(&state)
+			}
+			resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+		}
 		addClientError(&resp.Diagnostics, "Unable to create OpenAI service account", err)
 		return
 	}
