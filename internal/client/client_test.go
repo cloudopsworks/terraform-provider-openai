@@ -162,40 +162,44 @@ func TestOpenAIAdminClientServiceAccountLifecycle(t *testing.T) {
 }
 
 func TestOpenAIAdminClientServiceAccountCreateOnlySuppressesDefaultKey(t *testing.T) {
-	updateCalls := 0
-	cl := testClient(func(r *http.Request) (*http.Response, error) {
-		switch r.Method + " " + r.URL.Path {
-		case "POST /organization/projects/proj_1/service_accounts":
-			var body map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatal(err)
-			}
-			if body["name"] != "svc" || body["create_service_account_only"] != true {
-				t.Fatalf("unexpected create-only body: %#v", body)
-			}
-			return jsonResponse(map[string]any{"id": "sa_1", "name": "svc", "role": "none", "created_at": 11}), nil
-		case "POST /organization/projects/proj_1/service_accounts/sa_1":
-			updateCalls++
-			var body map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatal(err)
-			}
-			if body["role"] != "member" {
-				t.Fatalf("expected member role update: %#v", body)
-			}
-			return jsonResponse(map[string]any{"id": "sa_1", "name": "svc", "role": "member", "created_at": 11}), nil
-		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-		return nil, nil
-	})
+	for _, role := range []string{"member", "owner"} {
+		t.Run(role, func(t *testing.T) {
+			updateCalls := 0
+			cl := testClient(func(r *http.Request) (*http.Response, error) {
+				switch r.Method + " " + r.URL.Path {
+				case "POST /organization/projects/proj_1/service_accounts":
+					var body map[string]any
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Fatal(err)
+					}
+					if body["name"] != "svc" || body["create_service_account_only"] != true {
+						t.Fatalf("unexpected create-only body: %#v", body)
+					}
+					return jsonResponse(map[string]any{"id": "sa_1", "name": "svc", "role": "none", "created_at": 11}), nil
+				case "POST /organization/projects/proj_1/service_accounts/sa_1":
+					updateCalls++
+					var body map[string]any
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Fatal(err)
+					}
+					if len(body) != 1 || body["role"] != role {
+						t.Fatalf("expected role-only update: %#v", body)
+					}
+					return jsonResponse(map[string]any{"id": "sa_1", "name": "svc", "role": role, "created_at": 11}), nil
+				default:
+					t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+				}
+				return nil, nil
+			})
 
-	created, err := cl.CreateServiceAccount(context.Background(), "proj_1", ServiceAccountCreateRequest{Name: "svc", Role: "member", CreateServiceAccountOnly: true})
-	if err != nil || created.ID != "sa_1" || created.Role != "member" || created.APIKey != nil {
-		t.Fatalf("CreateServiceAccount(create-only) = %#v, %v", created, err)
-	}
-	if updateCalls != 1 {
-		t.Fatalf("update calls = %d, want 1", updateCalls)
+			created, err := cl.CreateServiceAccount(context.Background(), "proj_1", ServiceAccountCreateRequest{Name: "svc", Role: role, CreateServiceAccountOnly: true})
+			if err != nil || created.ID != "sa_1" || created.Role != role || created.APIKey != nil {
+				t.Fatalf("CreateServiceAccount(create-only) = %#v, %v", created, err)
+			}
+			if updateCalls != 1 {
+				t.Fatalf("update calls = %d, want 1", updateCalls)
+			}
+		})
 	}
 }
 
